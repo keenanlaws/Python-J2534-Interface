@@ -357,8 +357,7 @@ class j2534:
     def create_passtrhu_msg_struc(self, protocol_id, rx_status, tx_flags, timestamp, data_size, extra_data_index, data):
 
         struct = PASSTHRU_MSG()
-
-        data_buffer = (c_uint8 * data_size).from_buffer(data)
+        data_buffer = (c_ubyte * 4128)(*data)
 
         struct.ProtocolID = ctypes.c_ulong(protocol_id)
         struct.RxStatus = ctypes.c_ulong(rx_status)
@@ -479,7 +478,7 @@ class j2534:
         self._pPassThruGetLastError = ctypes.WINFUNCTYPE(ctypes.c_long, c_char_p)(("PassThruGetLastError", self._dll))
 
         # typedef long(*J2534_PassThruReadMsgs)(unsigned long ChannelID, PASSTHRU_MSG *pMsg, unsigned long *pNumMsgs, unsigned long Timeout);
-        self._pPassThruReadMsgs = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.Array, ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong)(("PassThruReadMsgs", self._dll))
+        self._pPassThruReadMsgs = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.POINTER(PASSTHRU_MSG), ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong)(("PassThruReadMsgs", self._dll))
 
         # typedef long(*J2534_PassThruStartMsgFilter)(unsigned long ChannelID, unsigned long FilterType, PASSTHRU_MSG *pMaskMsg, PASSTHRU_MSG *pPatternMsg, PASSTHRU_MSG *pFlowControlMsg, unsigned long *pMsgID);
         self._pPassThruStartMsgFilter = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong, ctypes.Array, ctypes.Array, ctypes.Array, ctypes.POINTER(ctypes.c_ulong))(("PassThruStartMsgFilter", self._dll))
@@ -539,8 +538,9 @@ if __name__ == '__main__':
     # load specific DLL library OR load library found in system (leave first param empty)
     #
     #interface = j2534('E:\dev\work\j2534_python\j2534dll\J2534.dll')
+    interface = j2534('E:\dev\work\j2534_python\Tools I use\J-Box 2\jbox2.dll')
     #interface = j2534()
-    interface = j2534(device_index=0)
+    #interface = j2534(device_index=4)
 
     #
     # check if the interface was properly initialized
@@ -555,6 +555,22 @@ if __name__ == '__main__':
     print interface.DeviceList
 
     #
+    # read some message
+    #
+    protocol_id = Protocols.ISO14230
+    rx_status = 0x00
+    tx_flags = 0x00
+    timestamp = 0x00
+    data_size = 4
+    extra_data_index = 0
+    data = [0xF0, 0xA0, 0x00, 0x00, ]
+
+    message = interface.create_passtrhu_msg_struc(protocol_id, rx_status, tx_flags, timestamp, data_size, extra_data_index,
+                                                  data)
+
+    err = interface.pass_thru_read_msgs(message, 1, 100)
+
+    #
     # open device
     #
     status = interface.pass_thru_open("DeviceNameToConnect")
@@ -563,7 +579,7 @@ if __name__ == '__main__':
     if status == Errors.STATUS_NOERROR:
         print "[i] device successfully opened"
     else:
-        print "[!] error code " + interface.pass_thru_get_last_error()
+        print "[!] error code " + str(status) + " (message " + interface.pass_thru_get_last_error() + ")"
         exit(2)
 
     #
@@ -587,18 +603,17 @@ if __name__ == '__main__':
     #
     # read some message
     #
-    protocol_id = Protocols.ISO15765
+    protocol_id = Protocols.ISO14230
     rx_status = 0x00
     tx_flags = 0x00
     timestamp = 0x00
-    data_size = 6
+    data_size = 4
     extra_data_index = 0
-    data = [0x00, 0x00, 0x07, 0xDF, 0x01, 0x00]
+    data = [0x00, 0x00, 0x00, 0x00, ]
 
     message = interface.create_passtrhu_msg_struc(protocol_id, rx_status, tx_flags, timestamp, data_size, extra_data_index, data)
 
-    #err = interface.pass_thru_read_msgs(message, 1, 100)
-    #err = interface.pass_thru_write_msgs(message, 100, 1)
+    err = interface.pass_thru_read_msgs(message, 1, 100)
 
     #
     # disconnect main connection channel
