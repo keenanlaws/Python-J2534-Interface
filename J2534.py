@@ -2,10 +2,33 @@
 import ctypes
 import os
 import os.path
-import sys
 import platform
 import _winreg
 from ctypes import *
+
+
+def hex_dump(data, num):
+    n = 0
+    lines = []
+
+    for i in range(0, num, 16):
+        line = ''
+        line += '%04x | ' % i
+        n += 16
+
+        for j in range(n - 16, n):
+            if j >= num: break
+            line += '%02X ' % abs(data[j])
+
+        line += ' ' * (3 * 16 + 7 - len(line)) + ' | '
+
+        for j in range(n - 16, n):
+            if j >= num: break
+            c = data[j] if not (data[j] < 0x20 or data[j] > 0x7e) else '.'
+            line += '%c' % c
+
+        lines.append(line)
+    return '\n'.join(lines)
 
 
 class PASSTHRU_MSG(ctypes.Structure):
@@ -18,6 +41,15 @@ class PASSTHRU_MSG(ctypes.Structure):
         ("ExtraDataIndex", c_ulong),  # start of extra data(i.e. CRC, checksum, etc) in Data array
         ("Data", c_ubyte * 4128)  # message payload or data
     ]
+
+    def dump(self):
+        print "ProtocolID = " + str(self.ProtocolID)
+        print "RxStatus = " + str(self.RxStatus)
+        print "TxFlags = " + str(self.TxFlags)
+        print "Timestamp = " + str(self.Timestamp)
+        print "DataSize = " + str(self.DataSize)
+        print "ExtraDataIndex = " + str(self.ExtraDataIndex)
+        print hex_dump(self.Data, self.DataSize)
 
 
 class SBYTE_ARRAY(ctypes.Structure):
@@ -75,7 +107,7 @@ class Ioctls:
     READ_PROG_VOLTAGE = 0x0E  # NULL			unsigned long
 
     # Ioctl parameters for GET_CONFIG and SET_CONFIG
-    DATA_RATE = 0x01  # 5 – 500000 	# Baud rate value used for vehicle network. No default value specified.
+    DATA_RATE = 0x01  # 5 � 500000 	# Baud rate value used for vehicle network. No default value specified.
     LOOPBACK = 0x03  # 0(OFF)/1(ON)	# 0 = Do not echo transmitted messages to the Receive queue. 1 = Echo transmitted messages to the Receive queue.
     # Default value is 0(OFF).
     NODE_ADDRESS = 0x04  # 0x00-0xFF	# J1850PWM specific, physical address for node of interest in the vehicle network. Default is no nodes are recognized by scan tool.
@@ -154,6 +186,11 @@ class Errors:
     ERR_INVALID_BAUDRATE = 0x19  # Unable to honor requested Baud rate within required tolerances.
     ERR_INVALID_DEVICE_ID = 0x1A  # PassThru device identifier is not recognized.
 
+    def __init__(self):
+        return
+
+
+class Filters:
     # Message filter types for fcns PassThruStartMsgFilter(), PassThruStopMsgFilter():
     PASS_FILTER = 0x01  # PassThru device adds receive messages matching the Mask and Pattern criteria to its receive message queue.
     BLOCK_FILTER = 0x02  # PassThru device ignores receive messages matching the Mask and Pattern criteria.
@@ -340,7 +377,7 @@ class j2534:
         d_ver = create_string_buffer(80)
         a_ver = create_string_buffer(80)
 
-        error = self._pPassThruReadVersion(self._hDeviceID, f_ver, d_ver, a_ver)
+        self._pPassThruReadVersion(self._hDeviceID, f_ver, d_ver, a_ver)
 
         return f_ver.value, d_ver.value, a_ver.value
 
@@ -355,7 +392,7 @@ class j2534:
     def create_passtrhu_msg_struc(self, protocol_id, rx_status, tx_flags, timestamp, data_size, extra_data_index, data):
 
         struct = PASSTHRU_MSG()
-        data_buffer = (c_ubyte * 4128)(*data)
+        data_buffer = (ctypes.c_ubyte * 4128)(*data)
 
         struct.ProtocolID = ctypes.c_ulong(protocol_id)
         struct.RxStatus = ctypes.c_ulong(rx_status)
@@ -367,27 +404,30 @@ class j2534:
 
         return struct
 
+    def create_msg_struc(self, protocol_id, tx_flags, data):
+
+        return self.create_passtrhu_msg_struc(protocol_id, 0, tx_flags, 0, len(data), 0, data)
+
     def pass_thru_read_msgs(self, messages, number_of_messages, timeout):
 
         # number of messages to read, but also number of actual messages read
-        number_of_read_messages = ctypes.c_ulong(number_of_messages)
-
-        err = self._pPassThruReadMsgs(self._ChannelID, messages, ctypes.byref(number_of_read_messages),
-                                      ctypes.c_ulong(timeout))
+        err = self._pPassThruReadMsgs(self._ChannelID, ctypes.byref(messages),
+                                      ctypes.byref(ctypes.c_ulong(number_of_messages)), ctypes.c_ulong(timeout))
 
         return err
 
     def pass_thru_write_msgs(self, messages, number_of_messages, timeout):
 
-        return self._pPassThruWriteMsgs(self._ChannelID, messages, ctypes.c_ulong(number_of_messages),
+        return self._pPassThruWriteMsgs(self._ChannelID, ctypes.byref(messages), ctypes.c_ulong(number_of_messages),
                                         ctypes.c_ulong(timeout))
 
     def pass_thru_start_msg_filter(self, filter_type, mask_message, pattern_message, flow_control_message):
 
         message_id_ref = ctypes.c_ulong(0)
 
-        err = self._pPassThruStartMsgFilter(self._ChannelID, ctypes.c_ulong(filter_type), mask_message, pattern_message,
-                                            flow_control_message, ctypes.byref(message_id_ref))
+        err = self._pPassThruStartMsgFilter(self._ChannelID, ctypes.c_ulong(filter_type), ctypes.byref(mask_message),
+                                            ctypes.byref(pattern_message), ctypes.byref(flow_control_message),
+                                            ctypes.byref(message_id_ref))
 
         return err, message_id_ref.value
 
@@ -410,8 +450,11 @@ class j2534:
 
     def pass_thru_ioctl(self, ioctl_id, input, output):
 
-        return self._pPassThruIoctl(self._hDeviceID, ctypes.c_ulong(ioctl_id), ctypes.byref(input),
-                                    ctypes.byref(output))
+        return self._pPassThruIoctl(self._ChannelID, ctypes.c_ulong(ioctl_id), input, output)
+
+    def pass_thru_get_batt_volts(self, ioctl_id, input, output):
+
+        return self._pPassThruIoctl(self._hDeviceID, ctypes.c_ulong(ioctl_id), input, output)
 
     def pass_thru_set_programming_voltage(self, pin_number, voltage):
 
@@ -420,303 +463,269 @@ class j2534:
 
     def load_dll(self, dll_path):
 
+        #
+        # does DLL file even exits?
+        #
         if not os.path.isfile(dll_path):
             return False
 
+        #
+        # set current dir to the DLL pathname, so the other dependent libraries are loaded from there
+        #
         os.chdir(os.path.dirname(dll_path))
 
+        #
+        # first load library as a WinDLL
+        #
+        FUNC_PROTO = ctypes.WINFUNCTYPE
         self._dll = ctypes.WinDLL(dll_path)
 
         if self._dll is None:
             return False
 
         #
-        # Function prototypes:
+        # try to call bogus function and if it fails (stack mismatch) try to load it as a CDLL
+        #
+        # typedef long(*J2534_PassThruGetLastError)(char *pErrorDescription);
+        pPassThruGetLastError = FUNC_PROTO(ctypes.c_long, c_char_p)(("PassThruGetLastError", self._dll))
+
+        try:
+            temp = create_string_buffer(80)
+            pPassThruGetLastError(temp)
+        except:
+            FUNC_PROTO = ctypes.CFUNCTYPE
+            self._dll = ctypes.CDLL(dll_path)
+
+            if self._dll is None:
+                return False
+
+        #
+        # get function pointers
         #
 
-        # typedef long(*J2534_PassThruOpen)(void* pName, unsigned long *pDeviceID);	# 0404-API only
-        self._pPassThruOpen = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_char_p, ctypes.POINTER(ctypes.c_ulong))(
+        self._pPassThruOpen = FUNC_PROTO(ctypes.c_long, ctypes.c_char_p, ctypes.POINTER(ctypes.c_ulong))(
             ("PassThruOpen", self._dll))
 
         # typedef long(*J2534_PassThruClose)(unsigned long DeviceID);			# 0404-API only
-        self._pPassThruClose = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong)(("PassThruClose", self._dll))
+        self._pPassThruClose = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong)(("PassThruClose", self._dll))
 
-        # typedef long(*J2534_PassThruConnect_0202)(unsigned long ProtocolID, unsigned long Flags, unsigned long *pChannelID);							# 0202-API
         try:
             ptr = getattr(self._dll, 'PassThruConnect_0202')
 
-            self._pPassThruConnect_0202 = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
-                                                             ctypes.POINTER(ctypes.c_ulong))(
+            self._pPassThruConnect_0202 = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
+                                                     ctypes.POINTER(ctypes.c_ulong))(
                 ("PassThruConnect_0202", self._dll))
         except:
             self._pPassThruConnect_0202 = None
 
-        # typedef long(*J2534_PassThruConnect_0404)(unsigned long DeviceID, unsigned long ProtocolID, unsigned long Flags, unsigned long BaudRate, unsigned long *pChannelID);	# 0404-API
         try:
             ptr = getattr(self._dll, 'PassThruConnect_0404')
-            self._pPassThruConnect_0404 = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
-                                                             ctypes.c_ulong, ctypes.c_ulong,
-                                                             ctypes.POINTER(ctypes.c_ulong))(
+            self._pPassThruConnect_0404 = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
+                                                     ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong))(
                 ("PassThruConnect_0404", self._dll))
         except:
             self._pPassThruConnect_0404 = None
 
-        # typedef long(*J2534_PassThruConnect)(unsigned long DeviceID, unsigned long ProtocolID, unsigned long Flags, unsigned long BaudRate, unsigned long *pChannelID);	# 0404-API
-        self._pPassThruConnect = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
-                                                    ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong))(
+        self._pPassThruConnect = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong,
+                                            ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong))(
             ("PassThruConnect", self._dll))
 
-        # typedef long(*J2534_PassThruDisconnect)(unsigned long ChannelID);
-        self._pPassThruDisconnect = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong)(("PassThruDisconnect", self._dll))
+        self._pPassThruDisconnect = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong)(("PassThruDisconnect", self._dll))
 
-        # typedef long(*J2534_PassThruReadVersion_0202)(char *pFirmwareVersion, char *pDllVersion, char *pApiVersion);								# 0202-API
         try:
             ptr = getattr(self._dll, 'PassThruReadVersion_0202')
-            self._pPassThruReadVersion_0202 = ctypes.WINFUNCTYPE(ctypes.c_long, c_char_p, c_char_p, c_char_p)(
+            self._pPassThruReadVersion_0202 = FUNC_PROTO(ctypes.c_long, c_char_p, c_char_p, c_char_p)(
                 ("PassThruReadVersion_0202", self._dll))
         except:
             self._pPassThruReadVersion_0202 = None
 
-        # typedef long(*J2534_PassThruReadVersion_0404)(unsigned long DeviceID, char *pFirmwareVersion, char *pDllVersion, char *pApiVersion);					# 0404-API
         try:
             ptr = getattr(self._dll, 'PassThruReadVersion_0202')
-            self._pPassThruReadVersion_0404 = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, c_char_p, c_char_p,
-                                                                 c_char_p)(("PassThruReadVersion_0404", self._dll))
+            self._pPassThruReadVersion_0404 = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, c_char_p, c_char_p, c_char_p)(
+                ("PassThruReadVersion_0404", self._dll))
         except:
             self._pPassThruReadVersion_0404 = None
 
-        # typedef long(*J2534_PassThruReadVersion)(unsigned long DeviceID, char *pFirmwareVersion, char *pDllVersion, char *pApiVersion);					# 0404-API
-        self._pPassThruReadVersion = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, c_char_p, c_char_p, c_char_p)(
+        self._pPassThruReadVersion = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, c_char_p, c_char_p, c_char_p)(
             ("PassThruReadVersion", self._dll))
 
-        # typedef long(*J2534_PassThruGetLastError)(char *pErrorDescription);
-        self._pPassThruGetLastError = ctypes.WINFUNCTYPE(ctypes.c_long, c_char_p)(("PassThruGetLastError", self._dll))
+        self._pPassThruGetLastError = FUNC_PROTO(ctypes.c_long, c_char_p)(("PassThruGetLastError", self._dll))
 
-        # typedef long(*J2534_PassThruReadMsgs)(unsigned long ChannelID, PASSTHRU_MSG *pMsg, unsigned long *pNumMsgs, unsigned long Timeout);
-        self._pPassThruReadMsgs = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.POINTER(PASSTHRU_MSG),
-                                                     ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong)(
+        self._pPassThruReadMsgs = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.POINTER(PASSTHRU_MSG),
+                                             ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong)(
             ("PassThruReadMsgs", self._dll))
 
-        # typedef long(*J2534_PassThruStartMsgFilter)(unsigned long ChannelID, unsigned long FilterType, PASSTHRU_MSG *pMaskMsg, PASSTHRU_MSG *pPatternMsg, PASSTHRU_MSG *pFlowControlMsg, unsigned long *pMsgID);
-        self._pPassThruStartMsgFilter = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
-                                                           ctypes.POINTER(PASSTHRU_MSG), ctypes.POINTER(PASSTHRU_MSG),
-                                                           ctypes.POINTER(PASSTHRU_MSG),
-                                                           ctypes.POINTER(ctypes.c_ulong))(
+        self._pPassThruStartMsgFilter = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
+                                                   ctypes.POINTER(PASSTHRU_MSG), ctypes.POINTER(PASSTHRU_MSG),
+                                                   ctypes.POINTER(PASSTHRU_MSG), ctypes.POINTER(ctypes.c_ulong))(
             ("PassThruStartMsgFilter", self._dll))
 
-        # typedef long(*J2534_PassThruStopMsgFilter)(unsigned long ChannelID, unsigned long MsgID);
-        self._pPassThruStopMsgFilter = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong)(
+        self._pPassThruStopMsgFilter = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong)(
             ("PassThruStopMsgFilter", self._dll))
 
-        # typedef long(*J2534_PassThruWriteMsgs)(unsigned long ChannelID, PASSTHRU_MSG *pMsg, unsigned long *pNumMsgs, unsigned long Timeout);
-        self._pPassThruWriteMsgs = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.POINTER(PASSTHRU_MSG),
-                                                      ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong)(
+        self._pPassThruWriteMsgs = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.POINTER(PASSTHRU_MSG),
+                                              ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong)(
             ("PassThruWriteMsgs", self._dll))
 
-        # typedef long(*J2534_PassThruStartPeriodicMsg)(unsigned long ChannelID, PASSTHRU_MSG *pMsg, unsigned long *pMsgID, unsigned long TimeInterval);
-        self._pPassThruStartPeriodicMsg = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong,
-                                                             ctypes.POINTER(PASSTHRU_MSG),
-                                                             ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong)(
+        self._pPassThruStartPeriodicMsg = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.POINTER(PASSTHRU_MSG),
+                                                     ctypes.POINTER(ctypes.c_ulong), ctypes.c_ulong)(
             ("PassThruStartPeriodicMsg", self._dll))
 
-        # typedef long(*J2534_PassThruStopPeriodicMsg)(unsigned long ChannelID, unsigned long MsgID);
-        self._pPassThruStopPeriodicMsg = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong)(
+        self._pPassThruStopPeriodicMsg = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong)(
             ("PassThruStopPeriodicMsg", self._dll))
 
-        # typedef long(*J2534_PassThruIoctl)(unsigned long HandleID, unsigned long IoctlID, void *pInput, void *pOutput);
-        self._pPassThruIoctl = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p,
-                                                  ctypes.c_void_p)(("PassThruIoctl", self._dll))
+        self._pPassThruIoctl = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_void_p,
+                                          ctypes.c_void_p)(("PassThruIoctl", self._dll))
 
-        # typedef long(*J2534_PassThruSetProgrammingVoltage_0202)(unsigned long PinNumber, unsigned long Voltage);								# 0202-API
         try:
             ptr = getattr(self._dll, 'PassThruSetProgrammingVoltage_0202')
-            self._pPassThruSetProgrammingVoltage_0202 = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong,
-                                                                           ctypes.c_ulong)(
+            self._pPassThruSetProgrammingVoltage_0202 = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong)(
                 ("PassThruSetProgrammingVoltage_0202", self._dll))
         except:
             self._pPassThruSetProgrammingVoltage_0202 = None
 
-        # typedef long(*J2534_PassThruSetProgrammingVoltage_0404)(unsigned long DeviceID, unsigned long PinNumber, unsigned long Voltage);					# 0404-API
         try:
             ptr = getattr(self._dll, 'PassThruSetProgrammingVoltage_0404')
-            self._pPassThruSetProgrammingVoltage_0404 = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong,
-                                                                           ctypes.c_ulong, ctypes.c_ulong)(
+            self._pPassThruSetProgrammingVoltage_0404 = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
+                                                                   ctypes.c_ulong)(
                 ("PassThruSetProgrammingVoltage_0404", self._dll))
         except:
             self._pPassThruSetProgrammingVoltage_0202 = None
 
-        # typedef long(*J2534_PassThruSetProgrammingVoltage)(unsigned long DeviceID, unsigned long PinNumber, unsigned long Voltage);					# 0404-API
-        self._pPassThruSetProgrammingVoltage = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
-                                                                  ctypes.c_ulong)(
-            ("PassThruSetProgrammingVoltage", self._dll))
+        self._pPassThruSetProgrammingVoltage = FUNC_PROTO(ctypes.c_long, ctypes.c_ulong, ctypes.c_ulong,
+                                                          ctypes.c_ulong)(("PassThruSetProgrammingVoltage", self._dll))
 
         return True
-
-    def hex_dump(self, data, num):
-
-        s = ''
-        n = 0
-        lines = []
-
-        for i in range(0, num, 16):
-            line = ''
-            line += '%04x | ' % (i)
-            n += 16
-
-            for j in range(n - 16, n):
-                if j >= num: break
-                line += '%02x ' % abs(data[j])
-
-            line += ' ' * (3 * 16 + 7 - len(line)) + ' | '
-
-            for j in range(n - 16, n):
-                if j >= num: break
-                c = data[j] if not (data[j] < 0x20 or data[j] > 0x7e) else '.'
-                line += '%c' % c
-
-            lines.append(line)
-        return '\n'.join(lines)
 
 
 if __name__ == '__main__':
 
-    #    [(u'MDI', u'C:\\Program Files (x86)\\GM MDI Software\\Products\\MDI\\Dynamic Link Libraries\\BVTX4J32.dll'),
-    #     (u'MDI 2', u'C:\\Program Files (x86)\\GM MDI Software\\Products\\MDI 2\\Dynamic Link Libraries\\BVTX4J32.dll'), (
-    #     u'MongoosePro Chrysler',
-    #     u'C:\\Program Files (x86)\\Drew Technologies, Inc\\J2534\\MongoosePro Chrysler\\monps432.dll'),
-    #     (u'McS1', u'C:\\Windows\\SYSTEM\\McS1v232.DLL'),
-    #     (u'Tech2', u'C:\\Program Files (x86)\\GM\\Tech2 J2534 DLL\\Tech2_32.dll'),
-    #     (u'Intrepid', u'C:\\Windows\\system32\\icsneo40.dll'),
-    #     (u'Intrepid neoVI Fire/Red', u'C:\\Windows\\system32\\icsJ2534Fire.dll'),
-    #     (u'Intrepid neoVI Yellow', u'C:\\Windows\\system32\\icsJ2534Yellow.dll'),
-    #     (u'Intrepid ValueCAN3', u'C:\\Windows\\system32\\icsJ2534VCAN3.dll'),
-    #     (u'J-Box 2', u'C:\\Program Files (x86)\\Launch Tech\\J2534\\J-Box 2\\JBox2.dll')]
-
-    #
     # load specific DLL library OR load library found in system (leave first param empty)
     #
     # interface = j2534('E:\dev\work\j2534_python\j2534dll\J2534.dll')
     # interface = j2534('E:\dev\work\j2534_python\Tools I use\J-Box 2\jbox2.dll')
     # interface = j2534()
-    interface = j2534(device_index=10)
-
+    interface = j2534(device_index=0)
     #
     # check if the interface was properly initialized
     #
     if not interface.initialized:
         print "[i] cannot load DLL library"
         exit(1)
-
     #
     # print a list of device list
     #
     print interface.DeviceList
-
-    #
-    # read some message
-    #
-    protocol_id = Protocols.ISO15765
-    rx_status = 0x00
-    tx_flags = 0x00
-    timestamp = 0x00
-    data_size = 4
-    extra_data_index = 0
-    data = [0xF0, 0xA0, 0x00, 0x00, ]
-
-    message = interface.create_passtrhu_msg_struc(protocol_id, rx_status, tx_flags, timestamp, data_size,
-                                                  extra_data_index, data)
-
-    print interface.hex_dump(message.Data, message.DataSize)
-    #exit(1)
-
-    #err = interface.pass_thru_read_msgs(message, 1, 100)
-
     #
     # open device
     #
     status = interface.pass_thru_open()
-
+    #
     # check connection status
+    #
     if status == Errors.STATUS_NOERROR:
         print "[i] device successfully opened"
     else:
         print "[!] error code " + str(status) + " (message " + interface.pass_thru_get_last_error() + ")"
         exit(2)
-
     #
     # connect using proper interface ID, flags and baud rate
     #
     interface_id = Protocols.ISO15765
     connection_flags = 0
     baud_rate = 500000
-
+    #
+    # Connect to J-2534 device
+    #
     status = interface.pass_thru_connect(interface_id, connection_flags, baud_rate)
-
     #
     # read version from the device
     #
     firmaware_version, dll_version, api_version = interface.pass_thru_read_version()
-
+    #
+    #
     print "[i] firmware version " + firmaware_version
     print "[i] DLL version " + dll_version
     print "[i] API version " + api_version
-
+    #
     #
     # read some message
     #
     protocol_id = Protocols.ISO15765
     rx_status = 0x00
-    tx_flags = 0x00
+    tx_flags = 0x0000040
     timestamp = 0x00
-    data_size = 4
-    extra_data_index = 0
-    data = [0x00, 0x00, 0x00, 0x00, ]
-
-    message = interface.create_passtrhu_msg_struc(protocol_id, rx_status, tx_flags, timestamp, data_size,
-                                                  extra_data_index, data)
-
+    extra_data_index = 00
     #
-
-    # mask_message.ProtocolID = Protocols.ISO15765
-    # mask_message.Data = [0xFF, 0xFF, 0xFF, 0xFF]
-    # mask_message.TxFlags = 0x00000040
-    # mask_message.DataSize = 4
-    mask_message = interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0x00000040, 0, 4, 0,
-                                                       [0xFF, 0xFF, 0xFF, 0xFF])
-
-    # pattern_message.ProtocolID = Protocols.ISO15765
-    # pattern_message.Data = [0x00, 0x00, 0x07, 0xE8]
-    # pattern_message.TxFlags = 0x00000040
-    # pattern_message.DataSize = 4
-    pattern_message = interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0x00000040, 0, 4, 0,
-                                                          [0x00, 0x00, 0x07, 0xE8])
-
-    # flow_control_message.ProtocolID = Protocols.ISO15765
-    # flow_control_message.Data = [0x00, 0x00, 0x07, 0xE0]
-    # flow_control_message.TxFlags = 0x00000040
-    # flow_control_message.DataSize = 4
-    flow_control_message = interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0x00000040, 0, 4, 0,
-                                                               [0x00, 0x00, 0x07, 0xE0])
-
-
+    # Setup Flow Control Filter
+    #
+    mask_message = interface.create_msg_struc(protocol_id, rx_status, [0xFF, 0xFF, 0xFF, 0xFF])
+    #
+    pattern_message = interface.create_msg_struc(protocol_id, rx_status, [0x00, 0x00, 0x07, 0xE8])
+    #
+    flow_control_message = interface.create_msg_struc(protocol_id, tx_flags, [0x00, 0x00, 0x07, 0xE0])
+    #
     # YOU NEED TO SET PROPER filter_type AND message_id values
-    err, msg_id = interface.pass_thru_start_msg_filter(0x01, mask_message, pattern_message, flow_control_message)
-
-    err = interface.pass_thru_read_msgs(message, 1, 1000)
-    err = interface.pass_thru_read_msgs(message, 1, 1000)
-    err = interface.pass_thru_read_msgs(message, 1, 1000)
-    err = interface.pass_thru_read_msgs(message, 1, 1000)
-    err = interface.pass_thru_read_msgs(message, 1, 1000)
-
-
-    print interface.hex_dump(message.Data, message.DataSize)
-
     #
-    # disconnect main connection channel
+    err, msg_id = interface.pass_thru_start_msg_filter(Filters.FLOW_CONTROL_FILTER, mask_message, pattern_message,
+                                                       flow_control_message)
+    #
+    # Check to make sure filters setup correctly
+    #
+    print "[i] pass_thru_start_msg_filter returned err=" + str(err) + "message_id=" + str(msg_id)
+    #
+    print "[i] attempting to write message"
+    #
+    # Attempt to read vin # 0x7E0-0x1a-0x90
+    #
+    message_write = interface.create_passtrhu_msg_struc(protocol_id, rx_status, tx_flags, 0, 6, 0,
+                                                        [0x00, 0x00, 0x07, 0xe0, 0x1a, 0x90])
+    #
+    # Dump TX message being written to J2534 device
+    #
+    message_write.dump()
+    #
+    # Check Battery Voltage with error check
+    #
+    err = interface.pass_thru_get_batt_volts(Ioctls.READ_VBATT, 0, 0)
+    print err
+    #
+    # Write message to J2534 device with error check
+    #
+    err = interface.pass_thru_write_msgs(message_write, 1, 10)
+    #
+    print "[i] pass_thru_write_msgs returned err=" + str(err)
+    #
+    # Clear RX and TX buffers
+    #
+    err = interface.pass_thru_ioctl(Ioctls.CLEAR_TX_BUFFER, 0, 0)
+    print err
+    #
+    err = interface.pass_thru_ioctl(Ioctls.CLEAR_RX_BUFFER, 0, 0)
+    print err
+    #
+    # Create receive message structure
+    #
+    message_read = interface.create_msg_struc(Protocols.ISO15765, tx_flags, [])
+    #
+    # Read Messages
+    #
+    interface.pass_thru_read_msgs(message_read, 1, 10)
+    #
+    #
+    interface.pass_thru_read_msgs(message_read, 1, 10)
+    #
+    # Dump RX buffer to read incoming data
+    #
+    message_read.dump()
+    #
+    # disconnect main connection channel with status
     #
     status = interface.pass_thru_disconnect()
-
+    print status
     #
-    # close device connection
+    # close device connection with status
     #
     status = interface.pass_thru_close()
+    print status
+
