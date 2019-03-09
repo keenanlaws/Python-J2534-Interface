@@ -7,166 +7,233 @@ import platform
 from ctypes import *
 
 
-def pass_open(tool, protocol_id, conn_flag, baud_rate):
-    # load specific DLL library OR load library found in system (leave first param empty)
-    # interface = j2534()
-    global interface
-    interface = j2534(device_index=tool)
-    if not interface.initialized:  # check if the interface was properly initialized
-        print ("[i] cannot load DLL library")
-        exit(1)
-    print interface.DeviceList  # print a list of device list
-    status = interface.pass_thru_open()  # open device
-    if status == Errors.STATUS_NOERROR:  # check connection status
-        print ("[i]device successfully opened")
-    else:
-        print "[!] error code " + str(status) + " (message " + interface.pass_thru_get_last_error() + ")"
-        exit(2)
-    # Connect to J-2534 using proper interface ID, flags and baud rate
-    status = interface.pass_thru_connect(protocol_id, conn_flag, baud_rate)
-    firmaware_version, dll_version, api_version = interface.pass_thru_read_version()  # read version from the device
-    print "[i] firmware version " + firmaware_version
-    print "[i] DLL version " + dll_version
-    print "[i] API version " + api_version
+class Utils:
 
+    @staticmethod
+    def hex_dump(items, count):
+        n = 0
+        lines = []
+        for i in range(0, count, 16):
+            line = '%04x | ' % i
+            n += 16
+            for j in range(n - 16, n):
+                if j >= count: break
+                line += '%02X ' % abs(items[j])
+            line += ' ' * (3 * 16 + 7 - len(line)) + ' | '
+            for j in range(n - 16, n):
+                if j >= count:
+                    break
+                c = items[j] if not (items[j] < 0x20 or items[j] > 0x7e) else '.'
+                line += '%c' % c
+            lines.append(line)
+        return '\n'.join(lines)
 
-def connect(protocol_id, flags, baud_rate):
-    status = interface.pass_thru_connect(protocol_id, flags, baud_rate)
-    if status == 0:
-        print "[i] Pass-Thru channel open"
-        firmaware_version, dll_version, api_version = interface.pass_thru_read_version()  # read version from the device
-        print "[i] firmware version " + firmaware_version
-        print "[i] DLL version " + dll_version
-        print "[i] API version " + api_version
-    else:
-        print "[i] ERROR! Opening Pass-Thru channel"
-
-
-def disconnect():
-    status = interface.pass_thru_disconnect()
-    if status == 0:
-        print "[i] Pass-Thru channel closed"
-    else:
-        print "[i] ERROR! Closing Pass-Thru channel"
-
-
-def pass_close():
-    status = interface.pass_thru_disconnect()  # disconnect main connection channel with status
-    if status == 0:
-        print "[i] Pass-Thru channel closed"
-    else:
-        print "[i] ERROR! Closing Pass-Thru channel"
-
-    status = interface.pass_thru_close()  # close device connection with status
-    if status == 0:
-        print "[i] Pass-Thru device closed"
-    else:
-        print "[i] ERROR! Closing Pass-Thru device"
-
-
-def flow_start(transmit_id, receive_id):
-    # Setup Flow Control Filter
-    mask_message = interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0, 0, 4, 0, [0xff, 0xff, 0xff, 0xff])
-    pattern_message = interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0, 0, 4, 0, receive_id)
-    # flow control tx flag has to be set with drew-tech and set to 0 with intrepid
-    flow_control_message = interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, TxFlags.ISO15765_FRAME_PAD, 0, 4,
-                                                               0, transmit_id)
-    # YOU NEED TO SET PROPER filter_type AND message_id values
-    global msg_id
-    err, msg_id = interface.pass_thru_start_msg_filter(Filters.FLOW_CONTROL_FILTER, mask_message, pattern_message,
-                                                       flow_control_message)
-    if err == 0:
-        print "[i] Flow control filter has been set"
-    else:
-        print "[i] ERROR! setting flow control filter"
-
-
-def flow_stop():
-    err = interface.pass_thru_stop_msg_filter(msg_id)
-    if err == 0:
-        print "[i] Flow control filter has been stopped"
-    else:
-        print "[i] ERROR! Stopping flow control filter"
-
-
-def Can_Vin():
-    print "[i] attempting to write message"
-    payload = [0x00, 0x00, 0x07, 0xe0, 0x1a, 0x90]
-    # Attempt to read vin # 0x7e0-0x1a-0x90
-    message_write = interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0,
-                                                        TxFlags.ISO15765_FRAME_PAD, 0, 6, 0, payload)
-    err = interface.pass_thru_write_msgs(message_write, 1, 500)  # Write message to J2534 device with error check
-    print "[i] pass_thru_write_msgs returned err=" + str(err)
-    # Create receive message structure
-    message_read = interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0, 0, 0, 0, [])
-    clear_tx()  # Clear RX and TX buffers
-    clear_rx()  # Clear RX and TX buffers
-    interface.pass_thru_read_msgs(message_read, 1, 500)  # Read Messages
-    interface.pass_thru_read_msgs(message_read, 1, 500)  # Read Messages
-    GetVin = message_read.slice_me(0, 23)
-    GetVin = GetVin[6:23]
-    Vin = int_dump(GetVin, len(GetVin))
-    Vin = Vin.replace(' ', '', 16)
-    print "[i] Current Vin # " + Vin
-
-
-def write(protocol_id, tx_flag, payload, size, delay):
-    print "[i] attempting to write message"
-    message_write = interface.create_passtrhu_msg_struc(protocol_id, 0, tx_flag, 0, size, 0, payload)
-    err = interface.pass_thru_write_msgs(message_write, 1, delay)  # Write message to J2534 device with error check
-    if err == 0:
-        print "[i] Write message completed successfully"
-    else:
-        print "[i] ERROR! Writing message"
-
-
-def clear_tx():
-    err = interface.pass_thru_ioctl(Ioctls.CLEAR_TX_BUFFER, 0, 0)
-    if err == 0:
-        print "[i] TX buffer has been cleared"
-    else:
-        print "[i] ERROR! clearing TX buffer"
-
-
-def clear_rx():
-    err = interface.pass_thru_ioctl(Ioctls.CLEAR_RX_BUFFER, 0, 0)
-    if err == 0:
-        print "[i] RX buffer has been cleared"
-    else:
-        print "[i] ERROR! clearing RX buffer"
-
-
-def hex_dump(data, num):
-    n = 0
-    lines = []
-    for i in range(0, num, 16):
+    @staticmethod
+    def int_dump(items, count):
         line = ''
-        line += '%04x | ' % i
-        n += 16
-        for j in range(n - 16, n):
-            if j >= num: break
-            line += '%02X ' % abs(data[j])
-        line += ' ' * (3 * 16 + 7 - len(line)) + ' | '
-        for j in range(n - 16, n):
-            if j >= num: break
-            c = data[j] if not (data[j] < 0x20 or data[j] > 0x7e) else '.'
-            line += '%c' % c
-        lines.append(line)
-    return '\n'.join(lines)
+        for j in range(count):
+            line += '%c ' % items[j]
+        return line
+
+    @staticmethod
+    def ascii_dump(items, count):
+        line = ''
+        for j in range(count):
+            line += '%c ' % items[j]
+        return line
 
 
-def int_dump(data, num):
-    line = ''
-    for j in range(num):
-        line += '%c ' % data[j]
-    return line
+class Flash:
 
+    def __init__(self):
 
-def ascii_dump(data, num):
-    line = ''
-    for j in range(num):
-        line += '%c ' % data[j]
-    return line
+        self.interface = None
+        self.msg_id = None
+
+        return
+
+    def close(self):
+
+        # stop flow if it was assigned
+        self.flow_stop()
+
+        self.pass_close()
+
+    def open(self, tool, protocol_id, conn_flag, baud_rate):
+
+        # load specific DLL library OR load library found in system (leave first param empty)
+        # interface = j2534()
+
+        self.interface = j2534(device_index=tool)
+
+        if not self.interface.initialized:  # check if the interface was properly initialized
+            print ("[i] cannot load DLL library")
+            return 1
+
+        # print a list of device list
+        toollist = self.interface.DeviceList
+        tools = len(self.interface.DeviceList)
+
+        for i in range(tools):
+            print toollist[i]
+
+        status = self.interface.pass_thru_open()  # open device
+
+        if status == 0:  # check connection status
+            print ("[i] Pass-Thru successfully opened")
+        else:
+            print "[!] error code " + str(status) + " (message " + self.interface.pass_thru_get_last_error() + ")"
+            return 2
+
+        # connect to J-2534 using proper interface ID, flags and baud rate
+        status = self.interface.pass_thru_connect(protocol_id, conn_flag, baud_rate)
+
+        # check connection status
+        if status == 0:
+
+            # read version from the device
+            firmaware_version, dll_version, api_version = self.interface.pass_thru_read_version()
+            print "[i] firmware version " + firmaware_version
+            print "[i] DLL version " + dll_version
+            print "[i] API version " + api_version
+            print ("[i] Pass-Thru channel successfully opened")
+        else:
+            print "[!] error code " + str(status) + " (message " + self.interface.pass_thru_get_last_error() + ")"
+            return 3
+
+        return True
+
+    def connect(self, protocol_id, flags, baud_rate):
+        status = self.interface.pass_thru_connect(protocol_id, flags, baud_rate)
+
+        if status == 0:
+            print "[i] Pass-Thru channel open"
+
+            # read version from the device
+            firmaware_version, dll_version, api_version = self.interface.pass_thru_read_version()
+
+            print "[i] firmware version " + firmaware_version
+            print "[i] DLL version " + dll_version
+            print "[i] API version " + api_version
+        else:
+            print "[!] ERROR! Opening Pass-Thru channel"
+
+    def disconnect(self):
+        status = self.interface.pass_thru_disconnect()
+
+        if status == 0:
+            print "[i] Pass-Thru channel closed"
+        else:
+            print "[!] ERROR! Closing Pass-Thru channel"
+
+    def pass_close(self):
+        status = self.interface.pass_thru_disconnect()  # disconnect main connection channel with status
+
+        if status == 0:
+            print "[i] Pass-Thru channel closed"
+        else:
+            print "[!] ERROR! Closing Pass-Thru channel"
+
+        status = self.interface.pass_thru_close()  # close device connection with status
+
+        if status == 0:
+            print "[i] Pass-Thru device closed"
+        else:
+            print "[!] ERROR! Closing Pass-Thru device"
+
+    def flow_start(self, transmit_id, receive_id):
+
+        # Setup Flow Control Filter
+        mask_message = self.interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0, 0, 4, 0, [0xff, 0xff, 0xff,
+                                                                                                    0xff])
+        pattern_message = self.interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0, 0, 4, 0, receive_id)
+
+        # flow control tx flag has to be set with drew-tech and set to 0 with intrepid
+        flow_control_message = self.interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0,
+                                                                        TxFlags.ISO15765_FRAME_PAD, 0, 4,
+                                                                        0, transmit_id)
+
+        # YOU NEED TO SET PROPER filter_type AND message_id values
+        err, self.msg_id = self.interface.pass_thru_start_msg_filter(Filters.FLOW_CONTROL_FILTER, mask_message,
+                                                                     pattern_message, flow_control_message)
+        if err == 0:
+            print "[i] Flow control filter has been set"
+            self.flow_initialized = True
+
+        else:
+            print "[!] ERROR! setting flow control filter"
+            self.flow_initialized = False
+
+        return self.flow_initialized
+
+    def flow_stop(self):
+        err = self.interface.pass_thru_stop_msg_filter(self.msg_id)
+        if err == 0:
+            print "[i] Flow control filter has been stopped"
+        else:
+            print "[!] ERROR! Stopping flow control filter"
+
+    def write(self, protocol_id, tx_flag, payload, size, delay):
+
+        print "[i] attempting to write message"
+        message_write = self.interface.create_passtrhu_msg_struc(protocol_id, 0, tx_flag, 0, size, 0, payload)
+        err = self.interface.pass_thru_write_msgs(message_write, 1,
+                                                  delay)  # Write message to J2534 device with error check
+
+        if err == 0:
+            print "[i] Write message completed successfully"
+        else:
+            print "[!] ERROR! Writing message"
+
+    def clear_tx(self):
+        err = self.interface.pass_thru_ioctl(Ioctls.CLEAR_TX_BUFFER, 0, 0)
+        if err == 0:
+            print "[i] TX buffer has been cleared"
+        else:
+            print "[!] ERROR! clearing TX buffer"
+
+    def clear_rx(self):
+        err = self.interface.pass_thru_ioctl(Ioctls.CLEAR_RX_BUFFER, 0, 0)
+        if err == 0:
+            print "[i] RX buffer has been cleared"
+        else:
+            print "[!] ERROR! clearing RX buffer"
+
+    def can_vin(self):
+
+        print "[i] Attempting to write message"
+
+        payload = [0x00, 0x00, 0x07, 0xe0, 0x1a, 0x90]
+
+        # Attempt to read vin # 0x7e0-0x1a-0x90
+        message_write = self.interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0,
+                                                                 TxFlags.ISO15765_FRAME_PAD, 0, 6, 0, payload)
+        err = self.interface.pass_thru_write_msgs(message_write, 1,
+                                                  500)  # Write message to J2534 device with error check
+
+        if err == 0:
+            print "[i] Write message completed successfully"
+        else:
+            print "[!] ERROR! Writing message"
+
+        # Create receive message structure
+        message_read = self.interface.create_passtrhu_msg_struc(Protocols.ISO15765, 0, 0, 0, 0, 0, [])
+
+        self.clear_tx()  # Clear RX and TX buffers
+        self.clear_rx()  # Clear RX and TX buffers
+
+        self.interface.pass_thru_read_msgs(message_read, 1, 500)  # Read Messages
+        self.interface.pass_thru_read_msgs(message_read, 1, 500)  # Read Messages
+
+        # message_read.dump()
+
+        get_vin = message_read.slice_me(0, 23)
+        get_vin = get_vin[6:23]
+
+        vin = Utils.int_dump(get_vin, len(get_vin))
+        vin = vin.replace(' ', '', 16)
+
+        print "[i] Current Vin # " + vin
 
 
 class PASSTHRU_MSG(ctypes.Structure):
@@ -187,7 +254,7 @@ class PASSTHRU_MSG(ctypes.Structure):
         print "Timestamp = " + str(self.Timestamp)
         print "DataSize = " + str(self.DataSize)
         print "ExtraDataIndex = " + str(self.ExtraDataIndex)
-        print hex_dump(self.Data, self.DataSize)
+        print Utils.hex_dump(self.Data, self.DataSize)
 
     def slice_me(self, start_index, end_index):
         global data
@@ -275,7 +342,7 @@ class Ioctls:
     ADD_TO_FUNCT_MSG_LOOKUP_TABLE = 0x0C
     DELETE_FROM_FUNCT_MSG_LOOKUP_TABLE = 0x0D
     READ_PROG_VOLTAGE = 0x0E
-    DATA_RATE = 0x01  # 5 � 500000 	# Baud rate value used for vehicle network. No default value specified.
+    DATA_RATE = 0x01  # 5 500000 	# Baud rate value used for vehicle network. No default value specified.
     LOOPBACK = 0x03  # 0(OFF)/1(ON)	# 0 = Do not echo transmitted messages to the Receive queue. 1 = Echo transmitted messages to the Receive queue.
     NODE_ADDRESS = 0x04  # 0x00-0xFF	# J1850PWM specific, physical address for node of interest in the vehicle network. Default is no nodes are recognized by scan tool.
     NETWORK_LINE = 0x05  # 0(BUS_NORMAL)/1(BUS_PLUS)/2(BUS_MINUS)	# J1850PWM specific, network line(s) active during message transfers. Default value is 0(BUS_NORMAL).
@@ -383,17 +450,23 @@ class Flags:
     # Loopback setting (ioctl GET_CONFIG/SET_CONFIG: parameter LOOPBACK):
     OFF = 0x00
     ON = 0x01
+
     # Data bits setting (ioctl GET_CONFIG/SET_CONFIG: parameter DATA_BITS):
     DATA_BITS_8 = 0x00
     DATA_BITS_7 = 0x01
+
     # Parity setting (ioctl GET_CONFIG/SET_CONFIG: parameter PARITY):
     NO_PARITY = 0x00
     ODD_PARITY = 0x01
     EVEN_PARITY = 0x02
+
     # J1850-PWM (ioctl GET_CONFIG/SET_CONFIG: parameter NETWORK_LINE):
     BUS_NORMAL = 0x00
     BUS_PLUS = 0x01
     BUS_MINUS = 0x02
+
+    def __init__(self):
+        return
 
 
 class ConnectFlags:
@@ -447,21 +520,31 @@ class Loader:
 
     def get_device_list(self):
 
-        BaseKey = _winreg.OpenKeyEx(_winreg.HKEY_LOCAL_MACHINE, self._PASSTHRU_REG)
+        try:
 
-        count = _winreg.QueryInfoKey(BaseKey)[0]
+            base_key = _winreg.OpenKeyEx(_winreg.HKEY_LOCAL_MACHINE, self._PASSTHRU_REG)
 
-        J2534_Device_Reg_Info = []
+            count = _winreg.QueryInfoKey(base_key)[0]
 
-        for i in range(count):
-            DeviceKey = _winreg.OpenKeyEx(BaseKey, _winreg.EnumKey(BaseKey, i))
-            Name = _winreg.QueryValueEx(DeviceKey, 'Name')[0]
-            FunctionLibrary = _winreg.QueryValueEx(DeviceKey, 'FunctionLibrary')[0]
-            J2534_Device_Reg_Info.append((Name, FunctionLibrary))
+            if count == 0:
+                return False
 
-        return J2534_Device_Reg_Info
+            J2534_Device_Reg_Info = []
 
-    def load_dll(self, dll_path=None):
+            for i in range(count):
+                DeviceKey = _winreg.OpenKeyEx(base_key, _winreg.EnumKey(base_key, i))
+                Name = _winreg.QueryValueEx(DeviceKey, 'Name')[0]
+                FunctionLibrary = _winreg.QueryValueEx(DeviceKey, 'FunctionLibrary')[0]
+                J2534_Device_Reg_Info.append((Name, FunctionLibrary))
+
+            return J2534_Device_Reg_Info
+
+        except WindowsError as e:
+
+            return False
+
+    def load_dll(dll_path=None):
+
         dir = os.getcwd()
         path, name = os.path.split(dll_path)
 
@@ -476,6 +559,7 @@ class Loader:
                 os.environ["PATH"] += os.pathsep + path
 
         loadedDll = None  # Load our dll and all dependencies
+
         try:
             # Windows supports all dll
             dllFile = name
@@ -485,7 +569,8 @@ class Loader:
             print("Could be a missing dependancy dll for '%s'." % dllFile)
             print("(Directory for dll: '%s')\n" % dll_path)
             os.chdir(dir)
-            exit(1)
+            return False
+
         os.chdir(dir)
         return loadedDll
 
@@ -494,9 +579,10 @@ class j2534:
 
     def __init__(self, dll_path=None, device_index=0):
 
+        self._pPassThruDisconnect = None
+
         # load default devices
         dll_loader = Loader()
-        self.DeviceList = dll_loader.get_device_list()
 
         self.initialized = False
 
@@ -512,7 +598,9 @@ class j2534:
         # load system DLL library
         else:
 
-            if len(self.DeviceList) > 0:
+            result = self.DeviceList = dll_loader.get_device_list()
+
+            if result is not False and len(self.DeviceList) > 0:
                 name, dllpath = self.DeviceList[device_index]
                 self.initialized = self.load_dll(dllpath)
 
@@ -538,6 +626,9 @@ class j2534:
                                       ctypes.c_ulong(baud_rate), ctypes.byref(self._ChannelID))
 
     def pass_thru_disconnect(self):
+
+        if self._pPassThruDisconnect is None:
+            return 1
 
         return self._pPassThruDisconnect(self._ChannelID)
 
@@ -689,13 +780,21 @@ class j2534:
 
 if __name__ == '__main__':
 
-    pass_open(0, Protocols.ISO15765, ConnectFlags.CAN_ID_BOTH, BaudRate.ISO15765_500000)
+    flash = Flash()
 
-    flow_start([0x00, 0x00, 0x07, 0xe0], [0x00, 0x00, 0x07, 0xe8])
+    result = flash.open(1, Protocols.ISO15765, ConnectFlags.CAN_ID_BOTH, BaudRate.ISO15765_500000)
 
-    Can_Vin()
+    if result is not True:
+        print "[!] error code %i" % result
+        exit(result)
 
-    flow_stop()
+    result = flash.flow_start([0x00, 0x00, 0x07, 0xe0], [0x00, 0x00, 0x07, 0xe8])
 
-    pass_close()
+    # detect failure
+    if result is False:
+        exit(1)
+
+    flash.can_vin()
+
+    flash.close()
 
