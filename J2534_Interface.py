@@ -513,56 +513,48 @@ module = ModuleTxRxId()
 
 
 # ======================================  LIST TOOLS INSTALLED ON THIS COMPUTER  ======================================
-# this for loop will list one tool per line uncomment which one you want to use...
-for tool in j2534.tools()[0]: print(tool)  #  this will print tool name
-# for tool in j2534.tools()[1]: print(tool)  # this will print tool dll path
 
-# this way will print a list containing all the tools installed
-# print(j2534.tools()[0])  #  this will print tool name
-# print(j2534.tools()[1])  #  this will print tool dll path
+for tool in j2534.tools()[0]: print(tool)  #  this will print one tool name per line...
+    
+# for tool in j2534.tools()[1]: print(tool)  # this will print one tool dll path per line...
+
+
+# print(j2534.tools()[0])  #  this will print a list of tool names installed
+
+# print(j2534.tools()[1])  #  this will print a list tool dll path
+
 # =======================================================  END  =======================================================
 
 
 # ===========================================  OPEN TOOL AND SET PARAMETERS  ==========================================
-# by using print(connect.extCan(1)) it will print tool name, firmware, serial number...
-# example 'connect.extCan(1)'  the 1 that is passed is the tools index you want to use...
-# REMEMBER INDEX STARTS AT 0 NOT 1 ONE uncomment which one you want to use...
-# print(connect.extCan(1))
 
-# use this without print if you want to open without printing all tools info...
-# example connect.extCan(1)
-connect.extCan(1)
-# connect.Can(1)
+# print(connect.extCan(1)) # uncomment and use to connect extended 29bit can using tool 
+                           # indexed at #1 position from tools function above. When you 
+                           # call print it will print connected tool info name, firmware, serial#...
+
+connect.extCan(1)  # uncomment and use to connect extended 29bit can using tool 
+                   # indexed at #1 position from tools function above.
+    
+# connect.Can(1)  # uncomment and use to connect 11bit can using tool 
+                  # indexed at #1 position from tools function above. When you 
+                  # call print it will print connected tool info name, firmware, serial#...
+
 # =======================================================  END  =======================================================
 
 
 # LOOK BELOW, HERE ARE SOME EXAMPLES OF HOW TO BUILD YOUR FUNCTIONS!!!!!!!
 
 udsVinCurrent = [
-            '[tx]-22f190',
-            '[rx]-62F190',
-            '[st]-[i] Current Vin Number ',
-            '[dg]-yes',
-            '[ix]-14:48',
-            '[fm]-0001',
-            '[tp]-uds'
-        ]
-udsVinOriginal = [
-            '[tx]-22f1A0',
-            '[rx]-62F1A0',
-            '[st]-[i] Original Vin Number ',
-            '[dg]-yes',
-            '[ix]-14:48',
-            '[sc]-level-1',
-            '[fm]-0001',
-            '[tp]-uds'
-        ]
-udsReset = [
-            '[tx]-1101',
-            '[rx]-5101',
-            '[dg]-yes',
-
-]
+            '[tx]-22f190',                      #  '[tx]-22f190'  this sets up function to tx data        =  22 F1 90...
+            '[rx]-62F190',                      #  '[rx]-62F190'  this sets up functions positive rx data =  62 F1 90...
+            '[st]-[i] Current Vin Number ',     #  '[st]-[i] Current Vin Number '  this sets the rx data string to be printed...
+            '[dg]-yes',                         #  '[dg]-yes' tells function to start a extended diag session...
+            '[ix]-14:48',                       #  '[ix]-14:48' the index of the data you are looking for byte 14 through 48...
+            '[fm]-0001',                        #  '[fm]-0001' format name you set of func to send you output to format...
+            '[tp]-uds'                          #  '[tp]-uds' sets type of communication you are using uds, kwp and so on...
+        ]                                       #   ONLY USE FUNC DATA NEEDED...
+                                                #  EXAMPLE THIS FUNC WILL OUTPUT = '[i] Current Vin Number 1C4PJLCB8EW313490'
+                                                
 
 VinCurrent = [
             '[tx]-1A90',
@@ -573,34 +565,40 @@ VinCurrent = [
             '[fm]-0001',
             '[tp]-kwp'
         ]
-VinOriginal = [
-            '[tx]-1A88',
-            '[rx]-5A88',
-            '[st]-[i] Original Vin Number ',
-            '[dg]-yes',
-            '[ix]-12:46',
-            '[sc]-level-1',
-            '[fm]-0001',
-            '[tp]-kwp'
-        ]
+
 Reset = [
-            '[tx]-1101',
+            '[tx]-1101',                         #  AS YOU SEE WITH THIS 'Reset' FUNCTION ONLY USE THE PARAMETERS YOU NEED!!...
             '[rx]-5192',
             '[dg]-yes',
             '[tp]-kwp'
 ]
 
 
-# print(j2534.txNrx(module.tipm, udsVinOriginal))
+print(j2534.txNrx(module.ecu2, VinCurrent))  # LOOK LOOK(-)(-) 'j2534.txNrx(module.ecu2, VinCurrent)' INSIDE FUNCTION PARAMETERS
+                                             # THE 'module.ecu2' IS SETTING THE EXTENDED CAN 29BIT IDENTIFIERS FOR ECU. IF YOU WANT
+                                             # TO SET 11BIT ECU IDENTIFIERS JUST CALL 'module.ecu'. SETUP YOUR OTHER ECU ADDRESSES
+                                             # UNDER 'class ModuleTxRxId:' TO SETUP FOR OTHER MODULES YOU PLAN ON TALKING TO...
+                                             # TO PRINT THE OUTPUT '[i] Current Vin Number 1C4PJLCB8EW313490' TO THE TERMINAL
+                                             # DONT FORGET TO CALL THE FUNCTION INSIDE THE Print('function here') FUNCTION!!!!...
+                                           
+# THIS FUNCTION ABOVE RETURNS = '[i] Original Vin Number 1C4PJLCB8EW313490'
+                    
+                    
 
-# print(j2534.txNrx(module.tipm, udsVinCurrent))
+# print(j2534.txNrx(module.ecu2, ['[tx]-1A87'])) # CALLING FUNCTION LIKE THIS IS THE EASIEST AND FASTEST WAY TO GET DATA OUT TO
+                                                 # AND BACK TO YOU. SO JUST SET YOUR PARAMS 'module.ecu2, ['[tx]-1A87']' AND WRAP
+                                                 # IT WITH PRINT AND IT WILL RETURN THE RAW DATA RECIEVED THAT EASY!!!!...
+        
+        
+# THIS FUNCTION ABOVE RETURNS = 18 DA F1 10 5A 87 02 36 61 C6 FF 19 47 09 05 00 36 38 32 34 32 34 34 31 41 42 
 
-# print(j2534.txNrx(module.tipm, udsReset))
 
-# j2534.txNrx(module.ecu2, VinCurrent)
+# BY RUNNING THE FUNCTIONS JUST LIKE THEY ARE CALLED IN THIS FILE IT WILL RETURN THIS BELOW...
 
-print(j2534.txNrx(module.ecu2, VinOriginal))  # THIS IS USING THE VINORIGINAL FUNCTION ABOVE
-
-# print(j2534.txNrx(module.ecu2, ['[tx]-1A87']))
-
+#    MongoosePro Chrysler
+#    MongoosePro GM II
+#    J-Box 2
+#    GNA600
+#    [i] Original Vin Number 1C4PJLCB8EW313490
+#    18 DA F1 10 5A 87 02 36 61 C6 FF 19 47 09 05 00 36 38 32 34 32 34 34 31 41 42 
 
