@@ -44,7 +44,10 @@ from J2534_Library import (
 
 from J2534_Library import Utils as Utility
 from J2534_Library import PassThru
+from J2534_Unlock import UnlockAlgorithm
 import binascii
+
+unlockCalc = UnlockAlgorithm()
 
 
 # ============================================  INTERFACE TO J2534 LIBRARY  ===========================================
@@ -87,7 +90,7 @@ class J2534:
 
         self.supplier = []
         self.variant = []
-        
+
     # if you set a formatter in your function you need to set it up in here to format data output...
     def outputFormatter(self, dataInput):
 
@@ -332,6 +335,172 @@ class J2534:
 
         return True
 
+    def supplierVariant(self):                          #  THIS IS HOW CHRYSLER IDENTIFIES THERE MODULES BY SUPPLIER AND VARIANT
+                                                        #  THIS IS ALL YOU GET I WONT GIVE UP ANY MORE SECRETS!!
+        self.supplier.clear()
+
+        self.variant.clear()
+
+        getlevel = self.security_level[0]
+
+        getType = self.communication_type[0]
+
+        if getType == 'kwp':
+
+            txPayload = self.tx_id_address[0] + [0X1A, 0X87]  # tx id and data to be sent ..
+
+            tx = self.JTOOL.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
+
+            rx = self.JTOOL.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+
+            if self.JTOOL.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+
+                for n in range(5):  # loop through passthru read IF completes with no errors will return 0...
+
+                    if self.JTOOL.pass_thru_read(rx, 1, self.rx_timeout) == 0:
+
+                        if rx.DataSize > 5:
+
+                            if '7F' not in rx.dump_data():
+
+                                if '5A 87' in rx.dump_data():
+
+                                    line = rx.dump_data().replace(" ", "", rx.DataSize)
+
+                                    output = [line[i: i + 2] for i in range(0, len(line), 2)]
+
+                                    self.supplier.insert(0, output[7])
+
+                                    self.variant.insert(0, output[8])
+
+                                    supplier = self.supplier[0]
+
+                                    variant = self.variant[0]
+
+                                    return(supplier, variant)
+
+                            else:
+
+                                return False
+
+                else:
+
+                    self.setConnectFlag(0)
+
+                    return False
+
+        return True
+
+    def securityUnlock(self):                               # THIS IS SET UP FOR UNLOCKING SECURITY ON CHRYSLER MODULES
+                                                            # YOU FIGURE OUT THE REST AND THE UNLOCK ALGOS!!! I CANT DO IT ALL FOR U!!
+        if self.supplierVariant():
+
+            getlevel = self.security_level[0]
+
+            getType = self.communication_type[0]
+
+            if getType == 'kwp':
+                if getlevel == 'level-1':
+                    txUnlock0 = [0X27, 0X01]
+                    txUnlock1 = [0X27, 0X02]
+                    level = 1
+                if getlevel == 'level-3':
+                    txUnlock0 = [0X27, 0X03]
+                    txUnlock1 = [0X27, 0X04]
+                    level = 3
+                if getlevel == 'level-5':
+                    txUnlock0 = [0X27, 0X05]
+                    txUnlock1 = [0X27, 0X06]
+                    level = 5
+                if getlevel == 'level-7':
+                    txUnlock0 = [0X27, 0X07]
+                    txUnlock1 = [0X27, 0X08]
+                    level = 7
+                if getlevel == 'level-9':
+                    txUnlock0 = [0X27, 0X09]
+                    txUnlock0 = [0X27, 0X0A]
+                    level = 9
+                if getlevel == 'level-61':
+                    txUnlock0 = [0X27, 0X61]
+                    txUnlock0 = [0X27, 0X62]
+                    level = 61
+
+                txPayload = self.tx_id_address[0] + txUnlock0  # tx id and data to be sent ..
+
+                tx = self.JTOOL.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
+
+                rx = self.JTOOL.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+
+                if self.JTOOL.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+
+                    for n in range(5):  # loop through passthru read IF completes with no errors will return 0...
+
+                        if self.JTOOL.pass_thru_read(rx, 1, self.rx_timeout) == 0:
+
+                            if rx.DataSize > 5:
+
+                                if '7F' not in rx.dump_data():
+
+                                    if '00 00 00 00' not in rx.dump_data():
+
+                                        calculated = unlockCalc.finder(rx.dump_data(),
+                                                                       self.supplier[0],
+                                                                       self.variant[0],
+                                                                       level)
+
+                                        if calculated:
+
+                                            # tx id and data to be sent ..
+                                            txPayload = self.tx_id_address[0] + txUnlock1 + calculated
+
+                                            tx = self.JTOOL.pass_thru_structure(self.protocol, 0,
+                                                                                self.tx_flag, 0,
+                                                                                len(txPayload), 0,
+                                                                                txPayload)
+
+                                            rx = self.JTOOL.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+
+                                            if self.JTOOL.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+
+                                                for n in range(5):
+
+                                                    if self.JTOOL.pass_thru_read(rx, 1, self.rx_timeout) == 0:
+
+                                                        if rx.DataSize > 5:
+
+                                                            if '7F' not in rx.dump_data():
+
+                                                                if '67 02 34' in rx.dump_data():
+
+                                                                    return True
+
+                                    else:
+
+                                        return True
+
+                                else:
+
+                                    if len(self.start_diagnostic_session) == 0:  # if no diag session needed dump data...
+
+                                        return rx.dump_data()
+
+                                    else:
+
+                                        if self.start_diagnostic_session[0] == 'yes':
+
+                                            if self.extendedDiagnostic() \
+                                                    and self.securityUnlock():  # start diag and recall this function...
+
+                                                return True
+
+                    else:
+
+                        self.setConnectFlag(0)
+
+                        return False
+
+            return True
+
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
     def flow_filter(self, tx, rx):
 
@@ -479,11 +648,27 @@ class J2534:
 
         if self.functionBuilder(ecu_id, dataInput) and self.connectFilter():
 
-                Output = self.sendNdump()
+                if not self.security_level:
 
-                if Output:
+                    Output = self.sendNdump()
 
-                    return Output
+                    if Output:
+
+                        return Output
+
+                else:
+
+                    if self.securityUnlock():
+
+                        Output = self.sendNdump()
+
+                        if Output:
+
+                            return Output
+
+                    else:
+
+                        return False
 
 j2534 = J2534()
 # =======================================================  END  =======================================================
@@ -583,7 +768,8 @@ udsVinCurrent = [
             '[dg]-yes',                         #  '[dg]-yes' tells function to start a extended diag session...
             '[ix]-14:48',                       #  '[ix]-14:48' the index of the data you are looking for byte 14 through 48...
             '[fm]-0001',                        #  '[fm]-0001' format name you set of func to send you output to format...
-            '[tp]-uds'                          #  '[tp]-uds' sets type of communication you are using uds, kwp and so on...
+            '[tp]-uds',                         #  '[tp]-uds' sets type of communication you are using uds, kwp and so on...
+            '[sc]-level-1'                      #  '[sc]-level-1' sets what level security unlock is needed to complete function...
         ]                                       #   ONLY USE FUNC DATA NEEDED...
                                                 #  EXAMPLE THIS FUNC WILL OUTPUT = '[i] Current Vin Number 1C4PJLCB8EW313490'
                                                 
