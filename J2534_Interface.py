@@ -536,6 +536,8 @@ connect.extCan(1)
 # =======================================================  END  =======================================================
 
 
+# LOOK BELOW, HERE ARE SOME EXAMPLES OF HOW TO BUILD YOUR FUNCTIONS!!!!!!!
+
 udsVinCurrent = [
             '[tx]-22f190',
             '[rx]-62F190',
@@ -590,8 +592,15 @@ Reset = [
 
 
 # print(j2534.txNrx(module.tipm, udsVinOriginal))
+
 # print(j2534.txNrx(module.tipm, udsVinCurrent))
+
 # print(j2534.txNrx(module.tipm, udsReset))
+
 # j2534.txNrx(module.ecu2, VinCurrent)
-print(j2534.txNrx(module.ecu2, VinOriginal))
+
+print(j2534.txNrx(module.ecu2, VinOriginal))  # THIS IS USING THE VINORIGINAL FUNCTION ABOVE
+
 # print(j2534.txNrx(module.ecu2, ['[tx]-1A87']))
+
+
