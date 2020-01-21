@@ -807,16 +807,5 @@ print(j2534.txNrx(module.ecu2, VinCurrent))  # LOOK LOOK(-)(-) 'j2534.txNrx(modu
                                                  # AND BACK TO YOU. SO JUST SET YOUR PARAMS 'module.ecu2, ['[tx]-1A87']' AND WRAP
                                                  # IT WITH PRINT AND IT WILL RETURN THE RAW DATA RECIEVED THAT EASY!!!!...
         
-        
-# THIS FUNCTION ABOVE RETURNS = 18 DA F1 10 5A 87 02 36 61 C6 FF 19 47 09 05 00 36 38 32 34 32 34 34 31 41 42 
-
-
-# BY RUNNING THE FUNCTIONS JUST LIKE THEY ARE CALLED IN THIS FILE IT WILL RETURN THIS BELOW...
-
-#    MongoosePro Chrysler
-#    MongoosePro GM II
-#    J-Box 2
-#    GNA600
-#    [i] Original Vin Number 1C4PJLCB8EW313490
-#    18 DA F1 10 5A 87 02 36 61 C6 FF 19 47 09 05 00 36 38 32 34 32 34 34 31 41 42 
+ 
 
