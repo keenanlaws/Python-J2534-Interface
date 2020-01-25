@@ -229,27 +229,11 @@ class J2534:
     # this will configure all the data automatically for you from the function you pass to it...
     def functionBuilder(self, ecu_id, func_in):
 
-        self.tx_id_address.clear()
-
-        self.rx_id_address.clear()
-
-        self.transmit_data.clear()
-
-        self.positive_response.clear()
-
-        self.output_string.clear()
-
-        self.start_diagnostic_session.clear()
-
-        self.data_index_start.clear()
-
-        self.data_index_end.clear()
-
-        self.security_level.clear()
-
-        self.format_data.clear()
-
-        self.communication_type.clear()
+        data_eraser = [self.tx_id_address, self.rx_id_address, self.transmit_data, self.positive_response,
+                       self.output_string, self.start_diagnostic_session, self.data_index_start, self.data_index_end,
+                       self.security_level, self.format_data, self.communication_type, self.edit_data_string]
+        
+        for item in data_eraser: item.clear()
 
         self.tx_id_address.insert(0, ecu_id[0])
 
