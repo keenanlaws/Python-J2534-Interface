@@ -776,20 +776,22 @@ Reset = [
 ]
 
 
-print(j2534.txNrx(module.ecu2, VinCurrent))  # LOOK LOOK(-)(-) 'j2534.txNrx(module.ecu2, VinCurrent)' INSIDE FUNCTION PARAMETERS
-                                             # THE 'module.ecu2' IS SETTING THE EXTENDED CAN 29BIT IDENTIFIERS FOR ECU. IF YOU WANT
-                                             # TO SET 11BIT ECU IDENTIFIERS JUST CALL 'module.ecu'. SETUP YOUR OTHER ECU ADDRESSES
-                                             # UNDER 'class ModuleTxRxId:' TO SETUP FOR OTHER MODULES YOU PLAN ON TALKING TO...
-                                             # TO PRINT THE OUTPUT '[i] Current Vin Number 1C4PJLCB8EW313490' TO THE TERMINAL
-                                             # DONT FORGET TO CALL THE FUNCTION INSIDE THE Print('function here') FUNCTION!!!!...
-                                           
-# THIS FUNCTION ABOVE RETURNS = '[i] Original Vin Number 1C4PJLCB8EW313490'
-                    
-                    
+if __name__ == '__main__':
+    
+    print(j2534.txNrx(module.ecu2, VinCurrent))  # LOOK LOOK(-)(-) 'j2534.txNrx(module.ecu2, VinCurrent)' INSIDE FUNCTION PARAMETERS
+                                                 # THE 'module.ecu2' IS SETTING THE EXTENDED CAN 29BIT IDENTIFIERS FOR ECU. IF YOU WANT
+                                                 # TO SET 11BIT ECU IDENTIFIERS JUST CALL 'module.ecu'. SETUP YOUR OTHER ECU ADDRESSES
+                                                 # UNDER 'class ModuleTxRxId:' TO SETUP FOR OTHER MODULES YOU PLAN ON TALKING TO...
+                                                 # TO PRINT THE OUTPUT '[i] Current Vin Number 1C4PJLCB8EW313490' TO THE TERMINAL
+                                                 # DONT FORGET TO CALL THE FUNCTION INSIDE THE Print('function here') FUNCTION!!!!...
 
-# print(j2534.txNrx(module.ecu2, ['[tx]-1A87'])) # CALLING FUNCTION LIKE THIS IS THE EASIEST AND FASTEST WAY TO GET DATA OUT TO
-                                                 # AND BACK TO YOU. SO JUST SET YOUR PARAMS 'module.ecu2, ['[tx]-1A87']' AND WRAP
-                                                 # IT WITH PRINT AND IT WILL RETURN THE RAW DATA RECIEVED THAT EASY!!!!...
+    # THIS FUNCTION ABOVE RETURNS = '[i] Original Vin Number 1C4PJLCB8EW313490'
+
+
+
+    # print(j2534.txNrx(module.ecu2, ['[tx]-1A87'])) # CALLING FUNCTION LIKE THIS IS THE EASIEST AND FASTEST WAY TO GET DATA OUT TO
+                                                     # AND BACK TO YOU. SO JUST SET YOUR PARAMS 'module.ecu2, ['[tx]-1A87']' AND WRAP
+                                                     # IT WITH PRINT AND IT WILL RETURN THE RAW DATA RECIEVED THAT EASY!!!!...
         
  
 
