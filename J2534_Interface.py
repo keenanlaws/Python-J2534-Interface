@@ -30,7 +30,7 @@
 # * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # *
 
-from J2534_Library import (
+from J2534 import (
     Protocols,
     BaudRate,
     Ioctls,
@@ -41,30 +41,91 @@ from J2534_Library import (
     ConnectFlags,
     TxFlags,
 )
-
-from J2534_Library import Utils as Utility
-from J2534_Library import PassThru
-from J2534_Unlock import UnlockAlgorithm
-import binascii
+from J2534_lookup import DiagnosticFunctions as Diagnostic
+from J2534_lookup import Information as information
+from J2534 import Utils as Utility
+from J2534 import PassThru
+from DataBase import (
+    Ecu_Origin,
+    Supplier,
+    PCM_Variant,
+    Vehicle_Line,
+    Platform,
+    Body_Style,
+    Country_Code,
+    Skim_State,
+)
+from Unlock import UnlockAlgorithm
+from binascii import unhexlify, hexlify
 
 unlockCalc = UnlockAlgorithm()
 
+class FormatData:
+    def __init__(self):
+        pass
+
+    # Returns modified n...
+    @staticmethod
+    def modifyBit(n, p, b):
+        mask = 1 << p
+        return hex((n & ~mask) | ((b << p) & mask))
+
+    # Returns hex to ascii...
+    @staticmethod
+    def f_0001(dataInput):
+
+        dirty = dataInput
+
+        clean = str(unhexlify(dirty).decode("utf-8"))
+
+        if not j2534.output_string:
+
+            return clean
+
+        else:
+
+            output = j2534.output_string + clean
+
+            return output
+
+    # Returns hex to ascii...
+    @staticmethod
+    def f_0000(dataInput):
+
+        Supplier_Variant_PartNumber = []
+
+        supplier = dataInput[2:4]
+
+        variant = dataInput[4:6]
+
+        partNumber = unhexlify(dataInput[20:52]).decode('utf-8')
+
+        Supplier_Variant_PartNumber.append(supplier)
+
+        Supplier_Variant_PartNumber.append(variant)
+
+        Supplier_Variant_PartNumber.append(partNumber)
+
+        if not j2534.output_string:
+
+            return
+
+        else:
+
+            output = j2534.output_string + clean
+
+            return output
+
+formdata = FormatData()
 
 # ============================================  INTERFACE TO J2534 LIBRARY  ===========================================
 class J2534:
     def __init__(self):
-        self.supvar = []
-        self.openSettings = []
-        self.txData = []
         self.toolName = []
         self.toolPath = []
         self.toolConnect = []
-        self._1A87 = []
-        self._1A87Decoded = []
-        self._21E5Decoded = []
-        self.control_module_data = None
 
-        self.tool = None
+        self.toolIndex = None
         self.baudrate_ = None
         self.connect_flag = None
         self.rx_timeout = None
@@ -72,43 +133,32 @@ class J2534:
         self.tx_flag = None
         self.protocol = None
 
-        self.JTOOL = None
-        self.isConnected = [0]
+        self.tool = None
+        self.isConnected = 0
 
         self.tx_id_address = []
         self.rx_id_address = []
-
         self.transmit_data = []
-        self.positive_response = []
-        self.output_string = []
-        self.start_diagnostic_session = []
-        self.data_index_start = []
-        self.data_index_end = []
-        self.security_level = []
-        self.format_data = []
-        self.communication_type = []
+        self.edit_data_string = []
 
-        self.supplier = []
-        self.variant = []
+        self.positive_response = None
+        self.output_string = None
+        self.start_diagnostic_session = None
+        self.data_index_start = None
+        self.data_index_end = None
+        self.security_level = None
+        self.format_data = None
+        self.communication_type = None
+        self.debugger = None
+        self.supplier = None
+        self.variant = None
 
     # if you set a formatter in your function you need to set it up in here to format data output...
     def outputFormatter(self, dataInput):
 
-        dirty = dataInput
+        if self.format_data == '0001': return formdata.f_0001(dataInput)
 
-        if self.format_data[0] == '0001':
-
-            clean = str(binascii.unhexlify(dirty).decode("utf-8"))
-
-            if not self.output_string:
-
-                return clean
-
-            else:
-
-                output = self.output_string[0] + clean
-
-                return output
+        if self.format_data == '0000': return formdata.f_0000(dataInput)
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
     # this will set a flag upon tool connection, so you will not try to open tool that is already open...
@@ -118,19 +168,15 @@ class J2534:
 
         if state == 0:
 
-            self.isConnected.clear()
+            self.isConnected = 0
 
-            self.isConnected.insert(0, 0)
-
-            self.JTOOL.pass_thru_close()
+            self.tool.pass_thru_close()
 
             return False
 
         elif state == 1:
 
-            self.isConnected.clear()
-
-            self.isConnected.insert(0, 1)
+            self.isConnected = 1
 
             pass
 
@@ -138,9 +184,9 @@ class J2534:
     # ONLY USED INSIDE txNrx FUNCTION!!!, this opens connection and sets flow filters...
     def connectFilter(self):
 
-        if self.isConnected[0] == 0:
+        if self.isConnected == 0:
 
-                if self.JTOOL.pass_thru_connect(self.protocol, self.connect_flag, self.baudrate_) == 0:
+                if self.tool.pass_thru_connect(self.protocol, self.connect_flag, self.baudrate_) == 0:
 
                         if self.flow_filter(self.tx_id_address[0], self.rx_id_address[0]):
 
@@ -164,76 +210,70 @@ class J2534:
 
         txPayload = self.tx_id_address[0] + self.transmit_data[0]  # tx id and data to be sent ..
 
-        tx = self.JTOOL.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
+        tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
 
-        rx = self.JTOOL.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+        rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
-        if self.JTOOL.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+        if self.start_diagnostic_session == 'yes':
 
-            for n in range(5):  # loop through passthru read IF completes with no errors will return 0...
+            if self.extDiag_10_92():
 
-                if self.JTOOL.pass_thru_read(rx, 1, self.rx_timeout) == 0:
-                    # print(rx.dump())
+                pass
 
-                    if rx.DataSize > 5:
+        if self.tool.pass_thru_write(tx, 1, self.tx_timeout) == 0:
 
-                        if '7F' not in rx.dump_data():
+            while self.tool.pass_thru_read(rx, 1, self.rx_timeout) == 0:
 
-                            if self.positive_response[0] in rx.dump_data():
+                if rx.DataSize > 5:
 
-                                line = rx.dump_data().replace(" ", "", rx.DataSize)
+                    if '7F' not in rx.dump_data() and self.positive_response in rx.dump_data():
 
-                                output = [line[i: i + 2] for i in range(0, len(line), 2)]
+                        line = rx.dump_data().replace(" ", "", rx.DataSize)
 
-                                if rx.DataSize == len(output):  # lets make sure we got all the data out...
+                        # if self.debugger == 'debug': print('[debug] Recieved data is = ' + line)
+                        if self.debugger == 'debug': print('\n' + '[debugger]'), rx.dump(), print('')
 
-                                    try:  #  try index, if there is no data index dump it all...
-                                        start = self.data_index_start[0]
+                        try:
 
-                                        end = self.data_index_end[0]
+                            output = line[self.data_index_start:self.data_index_end]
 
-                                        output = line[start:end]
+                            if self.debugger == 'debug': print('[debugger] Indexed output data is = ' + output + '\n')
 
-                                        if not self.format_data:
-
-                                            return output
-
-                                        else:
-
-                                            return self.outputFormatter(output)  # send indexed data to formatter...
-
-                                    except IndexError:
-
-                                        return rx.dump_data()
-
-                        else:
-                            if  len(self.start_diagnostic_session) == 0: # if no diag session needed dump data...
+                            if not self.format_data:
 
                                 return rx.dump_data()
 
                             else:
-                                if self.start_diagnostic_session[0] == 'yes':  # if diag session needed lets start it...
 
-                                    if self.extendedDiagnostic() \
-                                            and self.sendNdump():  #  start diag and recall this function...
+                                return self.outputFormatter(output)  # send indexed data to formatter...
 
-                                        pass
+                        except IndexError:
 
-            else:
+                            return
 
-                self.setConnectFlag(0)
+                    else:
 
-                return False
+                        if self.debugger == 'debug':
+                            print('[debugger] Negative response data is = ' + rx.dump_data() + '\n')
+
+                        return
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
     # this will configure all the data automatically for you from the function you pass to it...
     def functionBuilder(self, ecu_id, func_in):
 
-        data_eraser = [self.tx_id_address, self.rx_id_address, self.transmit_data, self.positive_response,
-                       self.output_string, self.start_diagnostic_session, self.data_index_start, self.data_index_end,
-                       self.security_level, self.format_data, self.communication_type, self.edit_data_string]
-        
-        for item in data_eraser: item.clear()
+        # clear all this shit for the next func...
+        self.positive_response = None
+        self.output_string = None
+        self.start_diagnostic_session = None
+        self.data_index_start = None
+        self.data_index_end = None
+        self.security_level = None
+        self.format_data = None
+        self.communication_type = None
+        self.debugger = None
+        self.supplier = None
+        self.variant = None
 
         self.tx_id_address.insert(0, ecu_id[0])
 
@@ -257,19 +297,17 @@ class J2534:
 
                 data = ' '.join(map(str, data))
 
-                self.positive_response.insert(0, data)
+                self.positive_response = data
 
             elif item.startswith('[st]'):
 
                 data = item.replace('[st]-', '')
 
-                self.output_string.insert(0, data)
+                self.output_string = data
 
             elif item.startswith('[dg]'):
 
-                data = item.replace('[dg]-', '')
-
-                self.start_diagnostic_session.insert(0, data)
+                self.start_diagnostic_session = 'yes'
 
             elif item.startswith('[ix]'):
 
@@ -277,91 +315,102 @@ class J2534:
 
                 data = data.replace(':', '')
 
-                x, y = data[0:2], data[2:4]
+                self.data_index_start = int(data[0:2])
 
-                x = int(x)
-
-                y = int(y)
-
-                self.data_index_start.insert(0, x)
-
-                self.data_index_end.insert(0, y)
+                self.data_index_end = int(data[2:4])
 
             elif item.startswith('[sc]'):
 
                 data = item.replace('[sc]-', '')
 
-                self.security_level.insert(0, data)
+                self.security_level = data
 
             elif item.startswith('[fm]'):
 
                 data = item.replace('[fm]-', '')
 
-                self.format_data.insert(0, data)
+                self.format_data = data
+
+            elif item.startswith('[debug]'):
+
+                self.debugger = 'debug'
 
             elif item.startswith('[tp]'):
 
                 data = item.replace('[tp]-', '')
 
-                self.communication_type.insert(0, data)
+                self.communication_type = data
+
+            elif item.startswith('[d1]'):
+
+                data = item.replace('[d1]-', '')
+
+                output = hexlify(data.encode('utf-8'))
+
+                output = [output[i: i + 2].decode() for i in range(0, len(output), 2)]
+
+                for item in output:
+
+                    item = int(item, 16)
+
+                    self.edit_data_string.append(item)
+
+                data = self.transmit_data[0] + self.edit_data_string
+
+                self.transmit_data.insert(0, data)
 
         for item in func_in:
 
             if item.startswith('[rx]'):
 
-                pass
+                data = ' '.join('{:02X}'.format(a) for a in self.rx_id_address[0]) + ' ' + self.positive_response[0]
 
-            else:
-
-                data = ' '.join('{:02X}'.format(a) for a in self.rx_id_address[0])
-
-                self.positive_response.insert(0, data)
+                self.positive_response = data
 
         return True
 
-    def supplierVariant(self):                          #  THIS IS HOW CHRYSLER IDENTIFIES THERE MODULES BY SUPPLIER AND VARIANT
-                                                        #  THIS IS ALL YOU GET I WONT GIVE UP ANY MORE SECRETS!!
+    # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
+    def identifyModule(self):
+
         self.supplier.clear()
 
         self.variant.clear()
 
-        getlevel = self.security_level[0]
+        getlevel = self.security_level
 
-        getType = self.communication_type[0]
+        getType = self.communication_type
 
         if getType == 'kwp':
 
             txPayload = self.tx_id_address[0] + [0X1A, 0X87]  # tx id and data to be sent ..
 
-            tx = self.JTOOL.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
+            tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
 
-            rx = self.JTOOL.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+            rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
-            if self.JTOOL.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+            if self.tool.pass_thru_write(tx, 1, self.tx_timeout) == 0:
 
-                for n in range(5):  # loop through passthru read IF completes with no errors will return 0...
+                while self.tool.pass_thru_read(rx, 1, self.rx_timeout) == 0:
 
-                    if self.JTOOL.pass_thru_read(rx, 1, self.rx_timeout) == 0:
+                    if rx.DataSize > 5:
 
-                        if rx.DataSize > 5:
+                        if '7F' not in rx.dump_data():
 
-                            if '7F' not in rx.dump_data():
+                            if '5A 87' in rx.dump_data():
 
-                                if '5A 87' in rx.dump_data():
+                                line = rx.dump_data().replace(" ", "", rx.DataSize)
 
-                                    line = rx.dump_data().replace(" ", "", rx.DataSize)
+                                output = [line[i: i + 2] for i in range(0, len(line), 2)]
 
-                                    output = [line[i: i + 2] for i in range(0, len(line), 2)]
+                                self.supplier.insert(0, output[7])
 
-                                    self.supplier.insert(0, output[7])
+                                self.variant.insert(0, output[8])
 
-                                    self.variant.insert(0, output[8])
+                                supplier = self.supplier[0]
 
-                                    supplier = self.supplier[0]
+                                variant = self.variant[0]
 
-                                    variant = self.variant[0]
-
-                                    return(supplier, variant)
+                                return(supplier, variant)
 
                             else:
 
@@ -375,13 +424,14 @@ class J2534:
 
         return True
 
-    def securityUnlock(self):                               # THIS IS SET UP FOR UNLOCKING SECURITY ON CHRYSLER MODULES
-                                                            # YOU FIGURE OUT THE REST AND THE UNLOCK ALGOS!!! I CANT DO IT ALL FOR U!!
-        if self.supplierVariant():
+    # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
+    def securityUnlock(self):
 
-            getlevel = self.security_level[0]
+        if self.identifyModule():
 
-            getType = self.communication_type[0]
+            getlevel = self.security_level
+
+            getType = self.communication_type
 
             if getType == 'kwp':
                 if getlevel == 'level-1':
@@ -411,90 +461,79 @@ class J2534:
 
                 txPayload = self.tx_id_address[0] + txUnlock0  # tx id and data to be sent ..
 
-                tx = self.JTOOL.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
+                tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
 
-                rx = self.JTOOL.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+                rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
-                if self.JTOOL.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+                if self.tool.pass_thru_write(tx, 1, self.tx_timeout) == 0:
 
-                    for n in range(5):  # loop through passthru read IF completes with no errors will return 0...
+                    while self.tool.pass_thru_read(rx, 1, self.rx_timeout) == 0:
 
-                        if self.JTOOL.pass_thru_read(rx, 1, self.rx_timeout) == 0:
+                        if rx.DataSize > 5:
 
-                            if rx.DataSize > 5:
+                            if '7F' not in rx.dump_data():
 
-                                if '7F' not in rx.dump_data():
+                                if '00 00 00 00' not in rx.dump_data():
 
-                                    if '00 00 00 00' not in rx.dump_data():
+                                    key = unlockCalc.finder(rx.dump_data(), self.supplier[0], self.variant[0], level)
 
-                                        calculated = unlockCalc.finder(rx.dump_data(),
-                                                                       self.supplier[0],
-                                                                       self.variant[0],
-                                                                       level)
+                                    if key:
 
-                                        if calculated:
+                                        txPayload = self.tx_id_address[0] + txUnlock1 + key
 
-                                            # tx id and data to be sent ..
-                                            txPayload = self.tx_id_address[0] + txUnlock1 + calculated
+                                        tx = self.tool.pass_thru_structure(self.protocol, 0,
+                                                                           self.tx_flag, 0,
+                                                                           len(txPayload), 0,
+                                                                           txPayload)
 
-                                            tx = self.JTOOL.pass_thru_structure(self.protocol, 0,
-                                                                                self.tx_flag, 0,
-                                                                                len(txPayload), 0,
-                                                                                txPayload)
+                                        rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
-                                            rx = self.JTOOL.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+                                        if self.tool.pass_thru_write(tx, 1, self.tx_timeout) == 0:
 
-                                            if self.JTOOL.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+                                            while self.tool.pass_thru_read(rx, 1, self.rx_timeout) == 0:
 
-                                                for n in range(5):
+                                                if rx.DataSize > 5:
 
-                                                    if self.JTOOL.pass_thru_read(rx, 1, self.rx_timeout) == 0:
+                                                    if '7F' not in rx.dump_data():
 
-                                                        if rx.DataSize > 5:
+                                                        if '67 02 34' in rx.dump_data():
 
-                                                            if '7F' not in rx.dump_data():
-
-                                                                if '67 02 34' in rx.dump_data():
-
-                                                                    return True
+                                                            return True
 
                                     else:
 
                                         return True
 
+                            else:
+
+                                if len(self.start_diagnostic_session) == 0:  # if no diag session needed dump data...
+
+                                    return rx.dump_data()
+
                                 else:
 
-                                    if len(self.start_diagnostic_session) == 0:  # if no diag session needed dump data...
+                                    if self.start_diagnostic_session == 'yes':
 
-                                        return rx.dump_data()
+                                        if self.extDiag_10_92() and self.securityUnlock():
 
-                                    else:
+                                            return True
 
-                                        if self.start_diagnostic_session[0] == 'yes':
+        else:
 
-                                            if self.extendedDiagnostic() \
-                                                    and self.securityUnlock():  # start diag and recall this function...
+            self.setConnectFlag(0)
 
-                                                return True
-
-                    else:
-
-                        self.setConnectFlag(0)
-
-                        return False
-
-            return True
+            return False
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
     def flow_filter(self, tx, rx):
 
-        mask = self.JTOOL.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, [0xFF, 0xFF, 0xFF, 0xFF])
+        mask = self.tool.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, [0xFF, 0xFF, 0xFF, 0xFF])
 
-        pattern = self.JTOOL.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, rx)
+        pattern = self.tool.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, rx)
 
-        flow_control = self.JTOOL.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, tx)
+        flow_control = self.tool.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, tx)
 
-        err, msg_id = self.JTOOL.pass_thru_start_msg_filter(Filters.FLOW_CONTROL_FILTER, mask, pattern, flow_control)
+        err, msg_id = self.tool.pass_thru_start_msg_filter(Filters.FLOW_CONTROL_FILTER, mask, pattern, flow_control)
 
         if err == 0:
 
@@ -523,7 +562,7 @@ class J2534:
 
         self.toolConnect.insert(6, data[6])  # baudrate...
 
-        self.tool = self.toolConnect[0]
+        self.toolIndex = self.toolConnect[0]
 
         self.protocol = self.toolConnect[1]
 
@@ -539,19 +578,19 @@ class J2534:
 
         # load specific DLL library OR load library found in system (leave first param empty)
 
-        self.JTOOL = PassThru(device_index=self.tool)
+        self.tool = PassThru(device_index=self.toolIndex)
 
-        if not self.JTOOL.initialized:  # check if the interface was properly initialized
+        if not self.tool.initialized:  # check if the interface was properly initialized
 
             print("[i] cannot load DLL library")
 
             return 1
 
-        if self.JTOOL.pass_thru_open() == 0:  # open device
+        if self.tool.pass_thru_open() == 0:  # open device
 
             # read version from the device
 
-            firmware_version, dll_version, api_version = self.JTOOL.pass_thru_version()
+            firmware_version, dll_version, api_version = self.tool.pass_thru_version()
 
             firmware_version = firmware_version.decode("utf-8")
 
@@ -563,48 +602,40 @@ class J2534:
 
         else:
 
-            self.JTOOL.pass_thru_close()
+            self.tool.pass_thru_close()
 
             return False
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
-    def extendedDiagnostic(self):
+    def extDiag_10_92(self):
 
         txPayload = self.tx_id_address[0] + [0x10, 0x92]  # tx id and data to be sent ..
 
         txLen = len(txPayload)  # length of tx id and data...
 
-        tx = self.JTOOL.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, txLen, 0, txPayload)
+        tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, txLen, 0, txPayload)
 
-        rx = self.JTOOL.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+        rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
         if self.connectFilter():
 
-            if self.JTOOL.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+            if self.tool.pass_thru_write(tx, 1, self.tx_timeout) == 0:
 
-                for n in range(5):  # loop through passthru read IF completes with no errors will return 0...
+                while self.tool.pass_thru_read(rx, 1, self.rx_timeout) == 0:
 
-                    if self.JTOOL.pass_thru_read(rx, 1, self.rx_timeout) == 0:
+                    if rx.DataSize > 5:
 
-                        if rx.DataSize > 5:
+                        if '7F' not in rx.dump_data():
 
-                            if '7F' not in rx.dump_data():
+                            if '50 92' in rx.dump_data():
 
-                                if '50 92' in rx.dump_data():
+                                return True
 
-                                    line = rx.dump_data().replace(" ", "", rx.DataSize)
+        else:
 
-                                    output = [line[i: i + 2] for i in range(0, len(line), 2)]
+            self.setConnectFlag(0)
 
-                                    if rx.DataSize == len(output):  # lets make sure we got all the data out...
-
-                                        return True
-
-                else:
-
-                    self.setConnectFlag(0)
-
-                    return False
+            return False
 
     # this will list all the j2534 tools that are installed on your computer...
     def tools(self):
@@ -634,21 +665,13 @@ class J2534:
 
                 if not self.security_level:
 
-                    Output = self.sendNdump()
-
-                    if Output:
-
-                        return Output
+                    return self.sendNdump()
 
                 else:
 
                     if self.securityUnlock():
 
-                        Output = self.sendNdump()
-
-                        if Output:
-
-                            return Output
+                        return self.sendNdump()
 
                     else:
 
@@ -714,66 +737,103 @@ module = ModuleTxRxId()
 
 
 # ======================================  LIST TOOLS INSTALLED ON THIS COMPUTER  ======================================
+# this for loop will list one tool per line uncomment which one you want to use...
+for tool in j2534.tools()[0]: print(tool)  #  this will print tool name
+# for tool in j2534.tools()[1]: print(tool)  # this will print tool dll path
 
-for tool in j2534.tools()[0]: print(tool)  #  this will print one tool name per line...
-    
-# for tool in j2534.tools()[1]: print(tool)  # this will print one tool dll path per line...
-
-
-# print(j2534.tools()[0])  #  this will print a list of tool names installed
-
-# print(j2534.tools()[1])  #  this will print a list tool dll path
-
+# this way will print a list containing all the tools installed
+# print(j2534.tools()[0])  #  this will print tool name
+# print(j2534.tools()[1])  #  this will print tool dll path
 # =======================================================  END  =======================================================
 
 
 # ===========================================  OPEN TOOL AND SET PARAMETERS  ==========================================
+# by using print(connect.extCan(1)) it will print tool name, firmware, serial number...
+# example 'connect.extCan(1)'  the 1 that is passed is the tools index you want to use...
+# REMEMBER INDEX STARTS AT 0 NOT 1 ONE uncomment which one you want to use...
+# print(connect.extCan(1))
 
-# print(connect.extCan(1)) # uncomment and use to connect extended 29bit can using tool 
-                           # indexed at #1 position from tools function above. When you 
-                           # call print it will print connected tool info name, firmware, serial#...
-
-connect.extCan(1)  # uncomment and use to connect extended 29bit can using tool 
-                   # indexed at #1 position from tools function above.
-    
-# connect.Can(1)  # uncomment and use to connect 11bit can using tool 
-                  # indexed at #1 position from tools function above. When you 
-                  # call print it will print connected tool info name, firmware, serial#...
-
+# use this without print if you want to open without printing all tools info...
+# example connect.extCan(1)
+connect.extCan(1)
+# connect.Can(1)
 # =======================================================  END  =======================================================
 
 
-# LOOK BELOW, HERE ARE SOME EXAMPLES OF HOW TO BUILD YOUR FUNCTIONS!!!!!!!
-
 udsVinCurrent = [
-            '[tx]-22f190',                      #  '[tx]-22f190'  this sets up function to tx data        =  22 F1 90...
-            '[rx]-62F190',                      #  '[rx]-62F190'  this sets up functions positive rx data =  62 F1 90...
-            '[st]-[i] Current Vin Number ',     #  '[st]-[i] Current Vin Number '  this sets the rx data string to be printed...
-            '[dg]-yes',                         #  '[dg]-yes' tells function to start a extended diag session...
-            '[ix]-14:48',                       #  '[ix]-14:48' the index of the data you are looking for byte 14 through 48...
-            '[fm]-0001',                        #  '[fm]-0001' format name you set of func to send you output to format...
-            '[tp]-uds',                         #  '[tp]-uds' sets type of communication you are using uds, kwp and so on...
-            '[sc]-level-1'                      #  '[sc]-level-1' sets what level security unlock is needed to complete function...
-        ]                                       #   ONLY USE FUNC DATA NEEDED...
-                                                #  EXAMPLE THIS FUNC WILL OUTPUT = '[i] Current Vin Number 1C4PJLCB8EW313490'
-                                                
-
-VinCurrent = [
-            '[tx]-1A90',
-            '[rx]-5A90',
+            '[tx]-22f190',
+            '[rx]-62F190',
             '[st]-[i] Current Vin Number ',
             '[dg]-yes',
-            '[ix]-12:46',
+            '[ix]-14:48',
             '[fm]-0001',
-            '[tp]-kwp'
+            '[tp]-uds'
+        ]
+udsVinOriginal = [
+            '[tx]-22f1A0',
+            '[rx]-62F1A0',
+            '[st]-[i] Original Vin Number ',
+            '[dg]-yes',
+            '[ix]-14:48',
+            '[sc]-level-1',
+            '[fm]-0001',
+            '[tp]-uds'
+        ]
+udsReset = [
+            '[tx]-1101',
+            '[rx]-5101',
+            '[dg]-yes',
+
+]
+
+
+SupplierVariant = [
+    '[tx]-1A87',
+    '[rx]-5A87',
+    '[ix]-12:52',
+    '[fm]-0000',
+    '[tp]-kwp',
+    '[debug]'
+        ]
+VinCurrent = [
+    '[tx]-1A90',
+    '[rx]-5A90',
+    '[st]-[i] Current Vin Number ',
+    '[ix]-12:46',
+    '[fm]-0001',
+    '[tp]-kwp',
+    '[debug]'
+        ]
+VinOriginal = [
+    '[tx]-1A88',
+    '[rx]-5A88',
+    '[st]-[i] Original Vin Number ',
+    '[ix]-12:46',
+    '[fm]-0001',
+    '[tp]-kwp'
+        ]
+PartNumber = [
+    '[tx]-1A87',
+    '[rx]-5A87',
+    '[st]-[i] Part Number ',
+    '[ix]-32:52',
+    '[fm]-0001',
+    '[tp]-kwp'
         ]
 
 Reset = [
-            '[tx]-1101',                         #  AS YOU SEE WITH THIS 'Reset' FUNCTION ONLY USE THE PARAMETERS YOU NEED!!...
-            '[rx]-5192',
-            '[dg]-yes',
-            '[tp]-kwp'
+    '[tx]-1101',
+    '[rx]-5192',
+    '[dg]-yes',
+    '[tp]-kwp'
 ]
+EditVinOriginal = [
+    '[tx]-3B90',
+    '[rx]-7B90',
+    '[tp]-kwp',
+    '[dg]-yes',
+    '[d1]-1C4PJLCB8EW313490'
+        ]
 
 
 if __name__ == '__main__':
