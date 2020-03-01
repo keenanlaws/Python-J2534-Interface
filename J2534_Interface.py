@@ -126,15 +126,15 @@ class J2534:
         self.toolConnect = []
 
         self.toolIndex = None
-        self.baudrate_ = None
-        self.connect_flag = None
+        self.baud_rate = None
+        self.connect_flags = None
         self.rx_timeout = None
         self.tx_timeout = None
         self.tx_flag = None
         self.protocol = None
 
         self.tool = None
-        self.isConnected = 0
+        self.isConnected = 'no'
 
         self.tx_id_address = []
         self.rx_id_address = []
@@ -154,51 +154,55 @@ class J2534:
         self.variant = None
 
     # if you set a formatter in your function you need to set it up in here to format data output...
-    def outputFormatter(self, dataInput):
+    def output_formatter(self, data_input):
 
-        if self.format_data == '0001': return formdata.f_0001(dataInput)
+        if self.format_data == "0001":
+            return format_data.f_0001(data_input)
 
-        if self.format_data == '0000': return formdata.f_0000(dataInput)
+        if self.format_data == "0000":
+            return format_data.f_0000(data_input)
+
+        if self.format_data == "0003":
+            return format_data.f_0003(data_input)
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
     # this will set a flag upon tool connection, so you will not try to open tool that is already open...
-    def setConnectFlag(self, state):
+    def connect_flag(self, state):
 
         #  if flag state is set to 0 tool is not connected if set 1 connection has already been made...
 
-        if state == 0:
+        if state == 'no':
 
-            self.isConnected = 0
+            self.isConnected = 'no'
 
             self.tool.pass_thru_close()
 
             return False
 
-        elif state == 1:
+        elif state == 'yes':
 
-            self.isConnected = 1
+            self.isConnected = 'yes'
 
             pass
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
     # ONLY USED INSIDE txNrx FUNCTION!!!, this opens connection and sets flow filters...
-    def connectFilter(self):
+    def connect_tool_set_filters(self):
 
-        if self.isConnected == 0:
+        if self.isConnected == 'no':
 
-                if self.tool.pass_thru_connect(self.protocol, self.connect_flag, self.baudrate_) == 0:
+            if self.tool.pass_thru_connect(self.protocol, self.connect_flags, self.baud_rate) == 0:
 
-                        if self.flow_filter(self.tx_id_address[0], self.rx_id_address[0]):
+                if self.flow_control_filter(self.tx_id_address[0], self.rx_id_address[0]):
+                    self.connect_flag('yes')
 
-                            self.setConnectFlag(1)
+                    return True
 
-                            return True
+            else:
 
-                else:
+                self.connect_flag('no')
 
-                    self.setConnectFlag(0)
-
-                    return False
+                return False
 
         else:
 
@@ -206,18 +210,18 @@ class J2534:
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
     # ONLY USED INSIDE txNrx FUNCTION!!!, this sets vars for tx, rx structure sends data and recieves data...
-    def sendNdump(self):
+    def transmit_and_receive_data(self):
 
-        txPayload = self.tx_id_address[0] + self.transmit_data[0]  # tx id and data to be sent ..
+        transmit_payload = (self.tx_id_address[0] + self.transmit_data[0])  # tx id and data to be sent ..
 
-        tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
+        tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(transmit_payload),
+                                           0, transmit_payload)
 
         rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
-        if self.start_diagnostic_session == 'yes':
+        if self.start_diagnostic_session == "yes":
 
-            if self.extDiag_10_92():
-
+            if self.start_extended_diagnostic_session_1092():
                 pass
 
         if self.tool.pass_thru_write(tx, 1, self.tx_timeout) == 0:
@@ -226,18 +230,21 @@ class J2534:
 
                 if rx.DataSize > 5:
 
-                    if '7F' not in rx.dump_data() and self.positive_response in rx.dump_data():
+                    if "7F" not in rx.dump_data() and self.positive_response in rx.dump_data():
 
                         line = rx.dump_data().replace(" ", "", rx.DataSize)
 
                         # if self.debugger == 'debug': print('[debug] Recieved data is = ' + line)
-                        if self.debugger == 'debug': print('\n' + '[debugger]'), rx.dump(), print('')
+                        if self.debugger == "debug":
+                            print("\n" + "[debugger]"), rx.dump(), print("")
 
                         try:
 
-                            output = line[self.data_index_start:self.data_index_end]
+                            output = line[self.data_index_start: self.data_index_end]
 
-                            if self.debugger == 'debug': print('[debugger] Indexed output data is = ' + output + '\n')
+                            if self.debugger == "debug" and self.data_index_start:
+
+                                print("[debugger] Indexed output data is = " + output + "\n")
 
                             if not self.format_data:
 
@@ -245,7 +252,7 @@ class J2534:
 
                             else:
 
-                                return self.outputFormatter(output)  # send indexed data to formatter...
+                                return self.output_formatter(output)  # send indexed data to formatter...
 
                         except IndexError:
 
@@ -253,16 +260,18 @@ class J2534:
 
                     else:
 
-                        if self.debugger == 'debug':
-                            print('[debugger] Negative response data is = ' + rx.dump_data() + '\n')
+                        if self.debugger == "debug":
+                            print("[debugger] Negative response data is = " + rx.dump_data() + "\n")
 
                         return
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
     # this will configure all the data automatically for you from the function you pass to it...
-    def functionBuilder(self, ecu_id, func_in):
+    def function_builder(self, ecu_id, func_in):
 
         # clear all this shit for the next func...
+        self.tx_id_address = []
+        self.rx_id_address = []
         self.positive_response = None
         self.output_string = None
         self.start_diagnostic_session = None
@@ -275,82 +284,81 @@ class J2534:
         self.supplier = None
         self.variant = None
 
-        self.tx_id_address.insert(0, ecu_id[0])
+        self.tx_id_address.append(ecu_id[0])
 
-        self.rx_id_address.insert(0, ecu_id[1])
+        self.rx_id_address.append(ecu_id[1])
 
         for item in func_in:
 
-            if item.startswith('[tx]'):
+            if item.startswith("[tx]"):
 
-                data = item.replace('[tx]-', '')
+                data = item.replace("[tx]-", "")
 
                 data = [int(data[i: i + 2], 16) for i in range(0, len(data), 2)]
 
                 self.transmit_data.insert(0, data)
 
-            elif item.startswith('[rx]'):
+            elif item.startswith("[rx]"):
 
-                data = item.replace('[rx]-', '')
+                data = item.replace("[rx]-", "")
 
                 data = [data[i: i + 2] for i in range(0, len(data), 2)]
 
-                data = ' '.join(map(str, data))
+                data = " ".join(map(str, data))
 
                 self.positive_response = data
 
-            elif item.startswith('[st]'):
+            elif item.startswith("[st]"):
 
-                data = item.replace('[st]-', '')
+                data = item.replace("[st]-", "")
 
-                self.output_string = data
+                self.output_string = '\n' + data
 
-            elif item.startswith('[dg]'):
+            elif item.startswith("[dg]"):
 
-                self.start_diagnostic_session = 'yes'
+                self.start_diagnostic_session = "yes"
 
-            elif item.startswith('[ix]'):
+            elif item.startswith("[ix]"):
 
-                data = item.replace('[ix]-', '')
+                data = item.replace("[ix]-", "")
 
-                data = data.replace(':', '')
+                data = data.replace(":", "")
 
                 self.data_index_start = int(data[0:2])
 
                 self.data_index_end = int(data[2:4])
 
-            elif item.startswith('[sc]'):
+            elif item.startswith("[sc]"):
 
-                data = item.replace('[sc]-', '')
+                data = item.replace("[sc]-", "")
 
                 self.security_level = data
 
-            elif item.startswith('[fm]'):
+            elif item.startswith("[fm]"):
 
-                data = item.replace('[fm]-', '')
+                data = item.replace("[fm]-", "")
 
                 self.format_data = data
 
-            elif item.startswith('[debug]'):
+            elif item.startswith("[debug]"):
 
-                self.debugger = 'debug'
+                self.debugger = "debug"
 
-            elif item.startswith('[tp]'):
+            elif item.startswith("[tp]"):
 
-                data = item.replace('[tp]-', '')
+                data = item.replace("[tp]-", "")
 
                 self.communication_type = data
 
-            elif item.startswith('[d1]'):
+            elif item.startswith("[d1]"):
 
-                data = item.replace('[d1]-', '')
+                data = item.replace("[d1]-", "")
 
-                output = hexlify(data.encode('utf-8'))
+                output = hexlify(data.encode("utf-8"))
 
                 output = [output[i: i + 2].decode() for i in range(0, len(output), 2)]
 
                 for item in output:
-
                     item = int(item, 16)
 
                     self.edit_data_string.append(item)
@@ -361,30 +369,38 @@ class J2534:
 
         for item in func_in:
 
-            if item.startswith('[rx]'):
-
-                data = ' '.join('{:02X}'.format(a) for a in self.rx_id_address[0]) + ' ' + self.positive_response[0]
+            if item.startswith("[rx]"):
+                data = (
+                        " ".join("{:02X}".format(a) for a in self.rx_id_address[0])
+                        + " "
+                        + self.positive_response[0]
+                )
 
                 self.positive_response = data
 
         return True
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
-    def identifyModule(self):
+    def identify_ecu(self):
 
         self.supplier.clear()
 
         self.variant.clear()
 
-        getlevel = self.security_level
+        level_to_unlock = self.security_level
 
-        getType = self.communication_type
+        communication_protocol = self.communication_type
 
-        if getType == 'kwp':
+        if communication_protocol == "kwp":
 
-            txPayload = self.tx_id_address[0] + [0X1A, 0X87]  # tx id and data to be sent ..
+            transmit_payload = self.tx_id_address[0] + [
+                0x1A,
+                0x87,
+            ]  # tx id and data to be sent ..
 
-            tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
+            tx = self.tool.pass_thru_structure(
+                self.protocol, 0, self.tx_flag, 0, len(transmit_payload), 0, transmit_payload
+            )
 
             rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
@@ -394,13 +410,15 @@ class J2534:
 
                     if rx.DataSize > 5:
 
-                        if '7F' not in rx.dump_data():
+                        if "7F" not in rx.dump_data():
 
-                            if '5A 87' in rx.dump_data():
+                            if "5A 87" in rx.dump_data():
 
                                 line = rx.dump_data().replace(" ", "", rx.DataSize)
 
-                                output = [line[i: i + 2] for i in range(0, len(line), 2)]
+                                output = [
+                                    line[i:i + 2] for i in range(0, len(line), 2)
+                                ]
 
                                 self.supplier.insert(0, output[7])
 
@@ -410,7 +428,7 @@ class J2534:
 
                                 variant = self.variant[0]
 
-                                return(supplier, variant)
+                                return supplier, variant
 
                             else:
 
@@ -418,50 +436,60 @@ class J2534:
 
                 else:
 
-                    self.setConnectFlag(0)
+                    self.connect_flag('no')
 
                     return False
 
         return True
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
-    def securityUnlock(self):
+    def security_unlock_ecu(self):
 
-        if self.identifyModule():
+        if self.identify_ecu():
 
-            getlevel = self.security_level
+            get_unlock_level = self.security_level
 
-            getType = self.communication_type
+            get_communication_type = self.communication_type
 
-            if getType == 'kwp':
-                if getlevel == 'level-1':
-                    txUnlock0 = [0X27, 0X01]
-                    txUnlock1 = [0X27, 0X02]
-                    level = 1
-                if getlevel == 'level-3':
-                    txUnlock0 = [0X27, 0X03]
-                    txUnlock1 = [0X27, 0X04]
-                    level = 3
-                if getlevel == 'level-5':
-                    txUnlock0 = [0X27, 0X05]
-                    txUnlock1 = [0X27, 0X06]
-                    level = 5
-                if getlevel == 'level-7':
-                    txUnlock0 = [0X27, 0X07]
-                    txUnlock1 = [0X27, 0X08]
-                    level = 7
-                if getlevel == 'level-9':
-                    txUnlock0 = [0X27, 0X09]
-                    txUnlock0 = [0X27, 0X0A]
-                    level = 9
-                if getlevel == 'level-61':
-                    txUnlock0 = [0X27, 0X61]
-                    txUnlock0 = [0X27, 0X62]
-                    level = 61
+            get_seed = None
 
-                txPayload = self.tx_id_address[0] + txUnlock0  # tx id and data to be sent ..
+            send_key = None
 
-                tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, len(txPayload), 0, txPayload)
+            level_to_unlock = None
+
+            if get_communication_type == "kwp":
+                if get_unlock_level == "level-1":
+                    get_seed = [0x27, 0x01]
+                    send_key = [0x27, 0x02]
+                    level_to_unlock = 1
+                if get_unlock_level == "level-3":
+                    get_seed = [0x27, 0x03]
+                    send_key = [0x27, 0x04]
+                    level_to_unlock = 3
+                if get_unlock_level == "level-5":
+                    get_seed = [0x27, 0x05]
+                    send_key = [0x27, 0x06]
+                    level_to_unlock = 5
+                if get_unlock_level == "level-7":
+                    get_seed = [0x27, 0x07]
+                    send_key = [0x27, 0x08]
+                    level_to_unlock = 7
+                if get_unlock_level == "level-9":
+                    get_seed = [0x27, 0x09]
+                    send_key = [0x27, 0x0A]
+                    level_to_unlock = 9
+                if get_unlock_level == "level-61":
+                    get_seed = [0x27, 0x61]
+                    get_seed = [0x27, 0x62]
+                    level_to_unlock = 61
+
+                transmit_payload = (
+                        self.tx_id_address[0] + get_seed
+                )  # tx id and data to be sent ..
+
+                tx = self.tool.pass_thru_structure(
+                    self.protocol, 0, self.tx_flag, 0, len(transmit_payload), 0, transmit_payload
+                )
 
                 rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
@@ -471,33 +499,56 @@ class J2534:
 
                         if rx.DataSize > 5:
 
-                            if '7F' not in rx.dump_data():
+                            if "7F" not in rx.dump_data():
 
-                                if '00 00 00 00' not in rx.dump_data():
+                                if "00 00 00 00" not in rx.dump_data():
 
-                                    key = unlockCalc.finder(rx.dump_data(), self.supplier[0], self.variant[0], level)
+                                    key = unlock_algo.finder(
+                                        rx.dump_data(),
+                                        self.supplier[0],
+                                        self.variant[0],
+                                        level_to_unlock,
+                                    )
 
                                     if key:
 
-                                        txPayload = self.tx_id_address[0] + txUnlock1 + key
+                                        transmit_payload = (
+                                                self.tx_id_address[0] + send_key + key
+                                        )
 
-                                        tx = self.tool.pass_thru_structure(self.protocol, 0,
-                                                                           self.tx_flag, 0,
-                                                                           len(txPayload), 0,
-                                                                           txPayload)
+                                        tx = self.tool.pass_thru_structure(
+                                            self.protocol,
+                                            0,
+                                            self.tx_flag,
+                                            0,
+                                            len(transmit_payload),
+                                            0,
+                                            transmit_payload,
+                                        )
 
-                                        rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
+                                        rx = self.tool.pass_thru_structure(
+                                            self.protocol, 0, 0, 0, 0, 0, []
+                                        )
 
-                                        if self.tool.pass_thru_write(tx, 1, self.tx_timeout) == 0:
+                                        if (
+                                                self.tool.pass_thru_write(
+                                                    tx, 1, self.tx_timeout
+                                                )
+                                                == 0
+                                        ):
 
-                                            while self.tool.pass_thru_read(rx, 1, self.rx_timeout) == 0:
+                                            while (
+                                                    self.tool.pass_thru_read(
+                                                        rx, 1, self.rx_timeout
+                                                    )
+                                                    == 0
+                                            ):
 
                                                 if rx.DataSize > 5:
 
-                                                    if '7F' not in rx.dump_data():
+                                                    if "7F" not in rx.dump_data():
 
-                                                        if '67 02 34' in rx.dump_data():
-
+                                                        if "67 02 34" in rx.dump_data():
                                                             return True
 
                                     else:
@@ -506,34 +557,46 @@ class J2534:
 
                             else:
 
-                                if len(self.start_diagnostic_session) == 0:  # if no diag session needed dump data...
+                                if (
+                                        len(self.start_diagnostic_session) == 0
+                                ):  # if no diag session needed dump data...
 
                                     return rx.dump_data()
 
                                 else:
 
-                                    if self.start_diagnostic_session == 'yes':
+                                    if self.start_diagnostic_session == "yes":
 
-                                        if self.extDiag_10_92() and self.securityUnlock():
-
+                                        if (
+                                                self.start_extended_diagnostic_session_1092()
+                                                and self.security_unlock_ecu()
+                                        ):
                                             return True
 
         else:
 
-            self.setConnectFlag(0)
+            self.connect_flag('no')
 
             return False
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
-    def flow_filter(self, tx, rx):
+    def flow_control_filter(self, tx, rx):
 
-        mask = self.tool.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, [0xFF, 0xFF, 0xFF, 0xFF])
+        mask = self.tool.pass_thru_structure(
+            j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, [0xFF, 0xFF, 0xFF, 0xFF]
+        )
 
-        pattern = self.tool.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, rx)
+        pattern = self.tool.pass_thru_structure(
+            j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, rx
+        )
 
-        flow_control = self.tool.pass_thru_structure(j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, tx)
+        flow_control = self.tool.pass_thru_structure(
+            j2534.protocol, 0, j2534.tx_flag, 0, 4, 0, tx
+        )
 
-        err, msg_id = self.tool.pass_thru_start_msg_filter(Filters.FLOW_CONTROL_FILTER, mask, pattern, flow_control)
+        err, msg_id = self.tool.pass_thru_start_msg_filter(
+            Filters.FLOW_CONTROL_FILTER, mask, pattern, flow_control
+        )
 
         if err == 0:
 
@@ -544,80 +607,55 @@ class J2534:
             return False
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
-    def open(self, data):
+    def select_tool_load_library(self, data):
 
-        self.toolConnect.clear()
+        if len(data) != 7:
+            return False
 
-        self.toolConnect.insert(0, data[0])  # device index of tool you want to use...
+        self.toolIndex = data[0]
 
-        self.toolConnect.insert(1, data[1])  # communication protocol...
+        self.protocol = data[1]
 
-        self.toolConnect.insert(2, data[2])  # tx flag...
+        self.tx_flag = data[2]
 
-        self.toolConnect.insert(3, data[3])  # rx delay...
+        self.rx_timeout = data[3]
 
-        self.toolConnect.insert(4, data[4])  # tx delay...
+        self.tx_timeout = data[4]
 
-        self.toolConnect.insert(5, data[5])  # connnect flag...
+        self.connect_flags = data[5]
 
-        self.toolConnect.insert(6, data[6])  # baudrate...
-
-        self.toolIndex = self.toolConnect[0]
-
-        self.protocol = self.toolConnect[1]
-
-        self.tx_flag = self.toolConnect[2]
-
-        self.rx_timeout = self.toolConnect[3]
-
-        self.tx_timeout = self.toolConnect[4]
-
-        self.connect_flag = self.toolConnect[5]
-
-        self.baudrate_ = self.toolConnect[6]
-
-        # load specific DLL library OR load library found in system (leave first param empty)
+        self.baud_rate = data[6]
 
         self.tool = PassThru(device_index=self.toolIndex)
 
-        if not self.tool.initialized:  # check if the interface was properly initialized
-
-            print("[i] cannot load DLL library")
-
-            return 1
-
         if self.tool.pass_thru_open() == 0:  # open device
-
-            # read version from the device
 
             firmware_version, dll_version, api_version = self.tool.pass_thru_version()
 
             firmware_version = firmware_version.decode("utf-8")
 
-            dll_version = dll_version.decode("utf-8")
-
-            api_version = api_version.decode("utf-8")
-
             return firmware_version
 
         else:
 
-            self.tool.pass_thru_close()
+            self.connect_flag('no')
 
             return False
 
     # DO NOT CALL THIS IT IS AN INTERNAL FUNCTION YOU DO NOT NEED TO TOUCH IT!!!...
-    def extDiag_10_92(self):
+    def start_extended_diagnostic_session_1092(self):
 
-        txPayload = self.tx_id_address[0] + [0x10, 0x92]  # tx id and data to be sent ..
+        transmit_payload = self.tx_id_address[0] + [0x10, 0x92]  # tx id and data to be sent ..
 
-        txLen = len(txPayload)  # length of tx id and data...
+        transmit_payload_length = len(transmit_payload)  # length of tx id and data...
 
-        tx = self.tool.pass_thru_structure(self.protocol, 0, self.tx_flag, 0, txLen, 0, txPayload)
+        tx = self.tool.pass_thru_structure(
+            self.protocol, 0, self.tx_flag, 0, transmit_payload_length, 0, transmit_payload
+        )
 
         rx = self.tool.pass_thru_structure(self.protocol, 0, 0, 0, 0, 0, [])
 
-        if self.connectFilter():
+        if self.connect_tool_set_filters():
 
             if self.tool.pass_thru_write(tx, 1, self.tx_timeout) == 0:
 
@@ -625,27 +663,25 @@ class J2534:
 
                     if rx.DataSize > 5:
 
-                        if '7F' not in rx.dump_data():
+                        if "7F" not in rx.dump_data():
 
-                            if '50 92' in rx.dump_data():
-
+                            if "50 92" in rx.dump_data():
                                 return True
 
         else:
 
-            self.setConnectFlag(0)
+            self.connect_flag('no')
 
             return False
 
     # this will list all the j2534 tools that are installed on your computer...
-    def tools(self):
+    def list_available_tools(self):
 
         count = 0
 
         try:
 
             for item in PassThru().DeviceList:
-
                 self.toolName.append(item[0])
 
                 self.toolPath.append(item[1])
@@ -659,23 +695,54 @@ class J2534:
             return
 
     # this is the main function you pass your function list to then it does the rest...
-    def txNrx(self, ecu_id, dataInput):
+    def transmit_and_receive(self, ecu_id, data_input):
 
-        if self.functionBuilder(ecu_id, dataInput) and self.connectFilter():
+        if self.function_builder(ecu_id, data_input) and self.connect_tool_set_filters():
 
-                if not self.security_level:
+            if not self.security_level:
 
-                    return self.sendNdump()
+                return self.transmit_and_receive_data()
+
+            else:
+
+                if self.security_unlock_ecu():
+
+                    return self.transmit_and_receive_data()
 
                 else:
 
-                    if self.securityUnlock():
+                    return False
 
-                        return self.sendNdump()
+    @staticmethod
+    def connect_29bit_can(j2534_tool_index):
+        open_j2534_tool = j2534.select_tool_load_library(
+            [
+                j2534_tool_index,
+                Protocols.ISO15765,
+                TxFlags.ISO15765_CAN_ID_29,
+                250,
+                250,
+                ConnectFlags.CAN_29BIT_ID,
+                BaudRate.CAN_500000,
+            ]
+        )
+        return open_j2534_tool
 
-                    else:
+    @staticmethod
+    def connect_11bit_can(j2534_tool_index):
+        open_j2534_tool = j2534.select_tool_load_library(
+            [
+                j2534_tool_index,
+                Protocols.ISO15765,
+                TxFlags.ISO15765_FRAME_PAD,
+                250,
+                250,
+                ConnectFlags.NONE,
+                BaudRate.CAN_500000,
+            ]
+        )
+        return open_j2534_tool
 
-                        return False
 
 j2534 = J2534()
 # =======================================================  END  =======================================================
