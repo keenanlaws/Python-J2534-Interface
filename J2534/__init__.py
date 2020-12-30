@@ -6,7 +6,7 @@ from .wrapper import ptOpen, ptClose
 from .wrapper import ptConnect, ptDisconnect
 from .wrapper import ptReadMsgs, ptWtiteMsgs
 from .wrapper import ptStartPeriodicMsg, ptStopPeriodicMsg
-from .wrapper import ptStartMsgFilter, ptStopMsgFilter
+from .wrapper import ptStartMsgFilter, ptStopMsgFilter, ptStartEcmFilter
 from .wrapper import ptSetProgrammingVoltage, ptReadVersion, ptGetLastError, ptIoctl, SetConfig
 
 from .wrapper import ReadVbat, ClearTxBuf, ClearRxBuf
