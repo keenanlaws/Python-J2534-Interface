@@ -75,13 +75,13 @@ class ptRxMsg(baseMsg):
         self.ProtocolID = ProtocolID
         self.TxFlags = TxFlags
 
-    def Dump(self):
-        print("ProtocolID = " + str(self.ProtocolID))
-        print("RxStatus = " + str(self.RxStatus))
-        print("TxFlags = " + str(self.TxFlags))
-        print("Timestamp = " + str(self.Timestamp))
-        print("DataSize = " + str(self.DataSize))
-        print("ExtraDataIndex = " + str(self.ExtraDataIndex))
+        def Dump(self):
+        print(f"ProtocolID = {str(self.ProtocolID)}")
+        print(f"RxStatus = {str(self.RxStatus)}")
+        print(f"TxFlags = {str(self.TxFlags)}")
+        print(f"Timestamp = {str(self.Timestamp)}")
+        print(f"DataSize = {str(self.DataSize)}")
+        print(f"ExtraDataIndex = {str(self.ExtraDataIndex)}")
         print(self.HexRx())
 
     def HexRx(self):
