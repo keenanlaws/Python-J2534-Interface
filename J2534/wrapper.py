@@ -32,25 +32,15 @@ class baseMsg(PassThru_Msg):
         return
 
     @staticmethod
-    def IntToID(ID):
-        if ID > 16777215:
-            H4 = ID >> 24 & 0xFF
-            H3 = ID >> 16 & 0xFF
-            H2 = ID >> 8 & 0xFF
-            H1 = ID & 0xFF
-            return [H4, H3, H2, H1]
-        elif ID > 65535:
-            H3 = ID >> 16 & 0xFF
-            H2 = ID >> 8 & 0xFF
-            H1 = ID & 0xFF
-            return [H3, H2, H1]
-        elif ID > 255:
-            H2 = ID >> 8 & 0xFF
-            H1 = ID & 0xFF
-            return [H2, H1]
-        else:
-            H1 = ID & 0xFF
-            return [H1]
+    def IntToID(transmit_identifier):
+        if transmit_identifier < 255:
+            return [transmit_identifier]
+        return [
+            transmit_identifier >> 24 & 0xFF,
+            transmit_identifier >> 16 & 0xFF,
+            transmit_identifier >> 8 & 0xFF,
+            transmit_identifier & 0xFF,
+        ]
 
 
 class ptMsg(baseMsg):
