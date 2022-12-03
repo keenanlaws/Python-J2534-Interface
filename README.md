@@ -6,7 +6,7 @@ This is a interface to the J2534 API written in Python 3.10.
 
 >>import J2534
 
->>print(jcom.tool_list())
+>>print(J2534.getDevices())
 
 >>[['VSI-2534', 'C:\\WINDOWS\\SysWOW64\\dgVSI32.dll'], 
 >>['CarDAQ PLUS', 'C:\\WINDOWS\\system32\\CDPLS432.DLL'], 
