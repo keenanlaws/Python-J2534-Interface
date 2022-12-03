@@ -51,7 +51,19 @@ rx = J2534.PassThruMsgBuilder(protocol, tx_flag)
 
 set data in buffer ready to tx.
 ```
-tx.set_id_and_data(tx_id, data_to_transmit)
+tx.set_id_and_data(0x7e0, [0x1a, 0x87])
+```
+Transmit data.
+```
+J2534.pt_write_message(channel_id, message to send, # of messages to send, tx delay)
+```
+Read data.
+```
+J2534.pt_read_message(channel_id, message to read, how many messages to read, rx delay)
+```
+Print data.
+```
+print(rx.dump_output())
 ```
 
 
