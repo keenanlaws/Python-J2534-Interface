@@ -1,19 +1,13 @@
-from .wrapper import j2534lib
-from .Define import ProtocolID, BaudRate
+from .Define import ProtocolID, BaudRate, TxFlags, FilterType, IoctlID, BaudRate, Parameter, Flags
+from .wrapper import J2534Api, japi
+from .wrapper import PassThruMsgBuilder, PassThruMskMsg, PassThruPatternMsg, PassThruFlowControlMsg
+from .wrapper import pt_connect, pt_disconnect
+from .wrapper import pt_open, pt_close
+from .wrapper import pt_read_message, pt_write_message
+from .wrapper import pt_set_programming_voltage, pt_read_version, pt_get_last_error, pt_ioctl, pt_set_config
+from .wrapper import pt_start_message_filter, pt_stop_message_filter, pt_start_ecu_filter
+from .wrapper import pt_start_periodic_message, pt_stop_periodic_message
+from .wrapper import read_battery_volts, clear_transmit_buffer, clear_receive_buffer, clear_periodic_messages
 
-from .wrapper import ptData, ptTxMsg, ptRxMsg, ptMskMsg, ptPatternMsg, ptFlowControlMsg
-from .wrapper import ptOpen, ptClose
-from .wrapper import ptConnect, ptDisconnect
-from .wrapper import ptReadMsgs, ptWtiteMsgs
-from .wrapper import ptStartPeriodicMsg, ptStopPeriodicMsg
-from .wrapper import ptStartMsgFilter, ptStopMsgFilter
-from .wrapper import ptSetProgrammingVoltage, ptReadVersion, ptGetLastError, ptIoctl, SetConfig
-
-from .wrapper import ReadVbat, ClearTxBuf, ClearRxBuf
-from .Error import J2534Error as Error
-
-SetErrorLog = j2534lib.SetErrorLog
-getDevices = j2534lib.getDevices
-
-# set the device
-setDevice = j2534lib.setDevice
+getDevices = japi.get_devices
+setDevice = japi.set_device
