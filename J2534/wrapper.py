@@ -9,7 +9,7 @@ from .dll import PassThru_Data, PassThruMessageStructure, \
 
 class MsgBuilder(PassThruMessageStructure):
 
-    def set_data(self, data):a
+    def set_data(self, data):
         self.DataSize = len(data)
         self.Data = PassThru_Data()
         for i in range(self.DataSize):
@@ -305,4 +305,3 @@ def clear_functional_message_lookup_table(channel_id):
         ct.c_void_p(None),
         ct.c_void_p(None),
     )
-

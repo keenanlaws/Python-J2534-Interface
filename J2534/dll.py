@@ -99,4 +99,3 @@ class PassThruLibrary(MyDll):
         # set default values for function_prototypes
         self.default_restype = ct.c_long
         super(PassThruLibrary, self).__init__(ct_dll, **self.function_prototypes)
-
