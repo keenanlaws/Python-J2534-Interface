@@ -1,22 +1,3 @@
-# ProtocolID
-class addBase(object):
-    @staticmethod
-    def value(*args):
-        out = 0
-        for i in args:
-            out |= i
-        return out
-
-    @staticmethod
-    def check(flags, *args):
-        for i in args:
-            if flags & i:
-                print(flags & i)
-            else:
-                return False
-        return True
-
-
 class ProtocolID(object):
     J1850VPW = 1
     J1850PWM = 2
@@ -30,7 +11,7 @@ class ProtocolID(object):
     SCI_B_TRANS = 10
 
 
-class Flags(addBase):
+class Flags(object):
     # Flags.value(Flags.CAN_29BIT_ID,Flags.CAN_ID_BOTH)
     NONE = 0
     CAN_29BIT_ID = 0x100
@@ -69,13 +50,6 @@ class FilterType(object):
 class Voltage(object):
     SHORT_TO_GROUND = 0xFFFFFFFF
     VOLTAGE_OFF = 0xFFFFFFFE
-
-    @staticmethod
-    def value(value):
-        # Programming Voltage 
-        # 0x00001388 5000mV
-        # 0x00004E20 20000mV
-        return value
 
 
 class IoctlID(object):
@@ -130,18 +104,19 @@ class IoctlID(object):
     ISO15765_WFT_MAX = 0x25
 
 
-class RxStatus(addBase):
-    TX_MSG_TYPE = 0x00000001
-    START_OF_MESSAGE = 0x00000002
-    ISO15765_FIRST_FRAME = 0x00000002  # compat from v0202
-    ISO15765_EXT_ADDR = 0x00000080  # Accidentally refered to in spec
-    RX_BREAK = 0x00000004
-    TX_DONE = 0x00000008
-    ISO15765_PADDING_ERROR = 0x00000010
-    ISO15765_ADDR_TYPE = 0x00000080
+class RxStatus(object):
+    TX_MSG_TYPE = 1
+    START_OF_MESSAGE = 2
+    ISO15765_FIRST_FRAME = 2
+    ISO15765_EXT_ADDR = 128
+    RX_BREAK = 4
+    TX_DONE = 8
+    ISO15765_PADDING_ERROR = 16
+    ISO15765_ADDR_TYPE = 128
+    TX_INDICATION = 9
 
 
-class TxFlags(addBase):
+class TxFlags(object):
     ISO15765_CAN_ID_29 = 0x00000140
     ISO15765_CAN_ID_11 = 0x00000040
     ISO15765_ADDR_TYPE = 0x00000080
@@ -149,6 +124,7 @@ class TxFlags(addBase):
     WAIT_P3_MIN_ONLY = 0x00000200
     SWCAN_HV_TX = 0x00000400
     SCI_MODE = 0x00400000
+    SCI_MODE_TX_VOLTAGE = 0x00C00000
     SCI_TX_VOLTAGE = 0x00800000
     ISO15765_FRAME_PAD = 0x00000040
     TX_NORMAL_TRANSMIT = 0x00000000
@@ -157,7 +133,6 @@ class TxFlags(addBase):
 
 class Parameter(object):
     DATA_RATE = 0x01
-    # unused                            = 0x02
     LOOPBACK = 0x03
     NODE_ADDRESS = 0x04  # Not supported
     NETWORK_LINE = 0x05  # Not supported
@@ -180,10 +155,11 @@ class Parameter(object):
     TWUP = 0x15
     PARITY = 0x16
 
-    class PARITY_ENUM(object):
-        NO_PARITY = 0
-        ODD_PARITY = 1
-        EVEN_PARITY = 2
+
+class ParityEnumerate(object):
+    NO_PARITY = 0
+    ODD_PARITY = 1
+    EVEN_PARITY = 2
 
     BIT_SAMPLE_POINT = 0x17
     SYNC_JUMP_WIDTH = 0x18
@@ -200,10 +176,3 @@ class Parameter(object):
     STMIN_TX = 0x23
     T3_MAX = 0x24
     ISO15765_WFT_MAX = 0x25
-    USED = [
-        DATA_RATE, LOOPBACK, NODE_ADDRESS, NETWORK_LINE, P1_MAX, P3_MIN, P4_MIN, \
-        W0, W1, W2, W3, W4, W5, TIDLE, TINIL, TWUP, PARITY, BIT_SAMPLE_POINT, SYNC_JUMP_WIDTH, \
-        T1_MAX, T2_MAX, T3_MAX, T4_MAX, T5_MAX, \
-        ISO15765_BS, ISO15765_STMIN, DATA_BITS, FIVE_BAUD_MOD, BS_TX, STMIN_TX, T3_MAX, ISO15765_WFT_MAX
-    ]
-
