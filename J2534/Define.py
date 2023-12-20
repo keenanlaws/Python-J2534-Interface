@@ -1,4 +1,7 @@
-class ProtocolID(object):
+from enum import Enum
+
+
+class ProtocolID(Enum):
     J1850VPW = 1
     J1850PWM = 2
     ISO9141 = 3
@@ -11,7 +14,7 @@ class ProtocolID(object):
     SCI_B_TRANS = 10
 
 
-class Flags(object):
+class Flags(Enum):
     # Flags.value(Flags.CAN_29BIT_ID,Flags.CAN_ID_BOTH)
     NONE = 0
     CAN_29BIT_ID = 0x100
@@ -25,7 +28,7 @@ class Flags(object):
     ISO9141_NO_CHECKSUM_DT = 0x40000000
 
 
-class BaudRate(object):
+class BaudRate(Enum):
     SCI = 7813
     SCI_HIGHSPEED = 62500
     ISO9141_10400 = 10400
@@ -47,7 +50,7 @@ class FilterType(object):
     FLOW_CONTROL_FILTER = 0x00000003
 
 
-class Voltage(object):
+class Voltage(Enum):
     SHORT_TO_GROUND = 0xFFFFFFFF
     VOLTAGE_OFF = 0xFFFFFFFE
 
