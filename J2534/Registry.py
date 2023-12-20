@@ -79,14 +79,3 @@ class ToolRegistryInfo:
             return self.j2534_registry_info[index_of_tool][1:]
         except IndexError:
             return False
-
-
-if __name__ == '__main__':
-    tri = ToolRegistryInfo()
-
-    tool =4
-    print(tri.supported_protocols(tool))
-    print(tri.vendor(tool))
-    print(tri.name(tool))
-    print(tri.dll_path(tool))
-    print(tri.tool_list)
