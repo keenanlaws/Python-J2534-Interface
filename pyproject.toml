@@ -1,0 +1,154 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "j2534-api"
+version = "2.0.0"
+description = "Python library for J2534 PassThru vehicle diagnostic interface - SAE J2534-1 compliant"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "J2534-API Contributors"}
+]
+maintainers = [
+    {name = "J2534-API Contributors"}
+]
+keywords = [
+    "j2534",
+    "passthru",
+    "automotive",
+    "diagnostics",
+    "obd",
+    "obd2",
+    "can",
+    "can-bus",
+    "vehicle",
+    "ecu",
+    "uds",
+    "iso15765",
+    "iso14229",
+    "kwp2000",
+    "chrysler",
+    "dodge",
+    "jeep",
+    "ram",
+    "sae",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Interface Engine/Protocol Translator",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Hardware :: Hardware Drivers",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/keenanlaws/j2534-api"
+Documentation = "https://github.com/keenanlaws/j2534-api#readme"
+Repository = "https://github.com/keenanlaws/j2534-api.git"
+Issues = "https://github.com/keenanlaws/j2534-api/issues"
+Changelog = "https://github.com/keenanlaws/j2534-api/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# GUI framework dependencies - install with: pip install j2534-api[gui-pyqt5]
+# Note: Dear PyGui and Flet removed (dependency issues with 32-bit Python)
+gui-pyqt5 = ["PyQt5>=5.15.0"]
+gui-customtkinter = ["customtkinter>=5.0.0"]
+gui-pysimplegui = ["FreeSimpleGUI>=5.0.0"]
+
+# Install all GUI frameworks with: pip install j2534-api[gui-all]
+gui-all = [
+    "PyQt5>=5.15.0",
+    "customtkinter>=5.0.0",
+    "FreeSimpleGUI>=5.0.0",
+]
+
+# Development dependencies - install with: pip install j2534-api[dev]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["J2534*", "AutoJ2534*", "J2534_REGISTRY*"]
+exclude = ["tests*", "examples*", "*.venv*", ".idea*", ".claude*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.md", "LICENSE", "py.typed"]
+
+# =============================================================================
+# Black Configuration (Code Formatter)
+# =============================================================================
+[tool.black]
+line-length = 100
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | __pycache__
+)/
+'''
+
+# =============================================================================
+# isort Configuration (Import Sorter)
+# =============================================================================
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["J2534", "AutoJ2534", "J2534_REGISTRY"]
+skip = [".venv", "venv", ".git", "__pycache__"]
+
+# =============================================================================
+# mypy Configuration (Type Checker)
+# =============================================================================
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = [
+    "venv",
+    ".venv",
+    "tests",
+    "examples",
+]
+
+# =============================================================================
+# pytest Configuration (Testing)
+# =============================================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

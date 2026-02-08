@@ -1,0 +1,60 @@
+# =============================================================================
+# MANIFEST.in - Package Distribution Manifest
+# =============================================================================
+# This file specifies which additional files to include in source distributions
+# Created for j2534-api package
+# =============================================================================
+
+# Include essential project files
+include LICENSE
+include README.md
+include CHANGELOG.md
+include pyproject.toml
+include setup.py
+
+# Include package documentation
+recursive-include J2534 *.md
+recursive-include AutoJ2534 *.md
+recursive-include J2534_REGISTRY *.md
+
+# Include type hints if present
+recursive-include J2534 py.typed *.pyi
+recursive-include AutoJ2534 py.typed *.pyi
+recursive-include J2534_REGISTRY py.typed *.pyi
+
+# Exclude development and build artifacts
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
+recursive-exclude * *.so
+recursive-exclude * *.dll
+
+# Exclude test and example directories from package
+prune tests
+prune examples
+prune J2534_REGISTRY/examples
+
+# Exclude IDE and editor files
+prune .idea
+prune .vscode
+prune .claude
+
+# Exclude virtual environments
+prune .venv
+prune venv
+prune ENV
+
+# Exclude build directories
+prune build
+prune dist
+prune *.egg-info
+
+# Exclude documentation build
+prune docs/_build
+prune site
+
+# Global exclusions
+global-exclude *.log
+global-exclude .DS_Store
+global-exclude Thumbs.db
+global-exclude .gitignore
+global-exclude .gitattributes

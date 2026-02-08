@@ -1,0 +1,77 @@
+# =============================================================================
+# J2534-API Development Requirements
+# =============================================================================
+#
+# The core J2534-API package has NO external dependencies.
+# It uses only Python standard library (ctypes, winreg, dataclasses, etc.)
+#
+# This file lists optional dependencies for development and GUI examples.
+#
+# Installation:
+#   pip install -r requirements.txt        # All development dependencies
+#   pip install j2534-api                  # Core package only
+#   pip install j2534-api[gui-all]         # Core + all GUI frameworks
+#   pip install j2534-api[dev]             # Core + development tools
+#
+# =============================================================================
+
+# =============================================================================
+# Development Tools
+# =============================================================================
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+
+# Code formatting
+black>=23.0.0
+isort>=5.0.0
+
+# Linting
+flake8>=6.0.0
+flake8-docstrings>=1.7.0
+
+# Type checking
+mypy>=1.0.0
+
+# Build tools
+build>=1.0.0
+twine>=4.0.0
+
+# =============================================================================
+# GUI Frameworks (Optional - for running examples)
+# Note: Dear PyGui and Flet removed (compatibility issues with 32-bit Python)
+# =============================================================================
+
+# PyQt5 - Professional cross-platform GUI
+# pip install PyQt5>=5.15.0
+
+# CustomTkinter - Modern themed Tkinter widgets
+# pip install customtkinter>=5.0.0
+
+# FreeSimpleGUI - Simple GUI for rapid prototyping (free fork of PySimpleGUI)
+# pip install FreeSimpleGUI>=5.0.0
+
+# =============================================================================
+# Notes
+# =============================================================================
+#
+# Windows Only: This library requires Windows as it uses:
+#   - Windows Registry (winreg) for device discovery
+#   - Windows DLLs (ctypes) for J2534 PassThru communication
+#
+# Python Version: Requires Python 3.10 or higher
+#
+# J2534 Device: A physical J2534-compliant PassThru device is required
+#   for actual vehicle communication. The library supports all SAE J2534-1
+#   compliant devices including:
+#   - Drew Technologies (Mongoose, CarDAQ)
+#   - Ford VCM II
+#   - GM MDI
+#   - Honda HDS
+#   - Toyota Techstream
+#   - And many more...
+#
+# =============================================================================
+
+customtkinter
