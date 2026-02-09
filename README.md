@@ -507,7 +507,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - SAE International for the J2534 PassThru standard
 - The Python community for excellent tooling
-- All contributors and users of this library
+- Claude AI for generating this README
 
 ---
 
